@@ -3,11 +3,16 @@ package it.isw2.prediction.dao;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import it.isw2.prediction.Project;
+import it.isw2.prediction.builder.TicketBuilder;
+import it.isw2.prediction.config.ApplicationConfig;
 import it.isw2.prediction.exception.RetrievalException;
 import it.isw2.prediction.exception.ticket.TicketRetrievalException;
+import it.isw2.prediction.exception.version.VersionRetrievalException;
+import it.isw2.prediction.factory.VersionDaoFactory;
 import it.isw2.prediction.model.Ticket;
 import it.isw2.prediction.exception.ticket.TicketParsingException;
 import it.isw2.prediction.config.JiraRestApiConfig;
+import it.isw2.prediction.model.Version;
 
 import java.net.URLEncoder;
 import java.net.http.HttpResponse;
@@ -25,16 +30,35 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
     private static final Logger logger = Logger.getLogger(TicketDaoRest.class.getName());
 
     @Override
-    public List<Ticket> retrieveTicketsByProject(Project project) throws TicketRetrievalException {
-        return this.retrieveTicketsByProject(project, 0, 0);
+    public List<Ticket> retrieveTickets() throws TicketRetrievalException {
+
+        List<Ticket> res = new ArrayList<>();
+        List<Ticket> tmp;
+
+        int startAt = 0;
+        int maxResults = 1000;
+        int results = 0;
+
+        do {
+            tmp = this.retrieveTickets(startAt, maxResults);
+            res.addAll(tmp);
+
+            results = tmp.size();
+            startAt += results;
+        } while(results == maxResults);
+
+        return res;
     }
 
     @Override
-    public List<Ticket> retrieveTicketsByProject(Project project, int startAt, int maxResults) throws TicketRetrievalException {
+    public List<Ticket> retrieveTickets(int startAt, int maxResults) throws TicketRetrievalException {
 
         // Controllo dei parametri
         if(startAt < 0) throw new IllegalArgumentException("Il numero di partenza deve essere maggiore o uguale a 0");
         if(maxResults < 0) throw new IllegalArgumentException("Il numero massimo di risultati deve essere maggiore o uguale a 0");
+
+        ApplicationConfig config = new ApplicationConfig();
+        Project project = config.getSelectedProject();
 
         logger.log(Level.FINE, () -> "Retrieving tickets of " + project.getKey() + " by " + startAt + " to " +maxResults);
 
@@ -107,6 +131,25 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
                 : null;
 
         // Creazione del ticket
-        return new Ticket(Integer.parseInt(id), key, resolutionDate, creationDate);
+        TicketBuilder builder = new TicketBuilder(Integer.parseInt(id), key, resolutionDate, creationDate);
+
+        // Parsing delle versioni
+        if (fields.has("versions") && fields.get("versions").isArray()) {
+
+            VersionDaoFactory versionDaoFactory = VersionDaoFactory.getInstance();
+            VersionDao versionDao = versionDaoFactory.getVersionDao();
+
+            for (JsonNode versionNode : fields.get("versions")) {
+                try {
+                    // Parsing della versione
+                    String versionId = versionNode.get("id").asText();
+                    builder.withAffectedVersion(versionDao.retrieveVersionById(Integer.parseInt(versionId)));
+                } catch (VersionRetrievalException e) {
+                    logger.log(Level.WARNING, "Errore durante il recupero della versione: {0}", e.getMessage());
+                }
+            }
+        }
+
+        return builder.build();
     }
 }

@@ -3,6 +3,7 @@ package it.isw2.prediction.dao;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import it.isw2.prediction.Project;
+import it.isw2.prediction.config.ApplicationConfig;
 import it.isw2.prediction.exception.RetrievalException;
 import it.isw2.prediction.exception.version.VersionParsingException;
 import it.isw2.prediction.exception.version.VersionRetrievalException;
@@ -13,6 +14,7 @@ import java.net.http.HttpResponse;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -22,55 +24,95 @@ public class VersionDaoRest extends DaoRest implements VersionDao {
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private static final Logger logger = Logger.getLogger(VersionDaoRest.class.getName());
 
+    private static HashMap<Integer, Version> versions = null;
+
     @Override
-    public List<Version> retrieveVersionsByProject(Project project) throws VersionRetrievalException {
-        return this.retrieveVersionsByProject(project, 0, 0);
+    public List<Version> retrieveVersions() throws VersionRetrievalException {
+        this.loadVersionsCache();
+        return new ArrayList<>(versions.values());
     }
 
     @Override
-    public List<Version> retrieveVersionsByProject(Project project, int startAt, int maxResults) throws VersionRetrievalException {
+    public List<Version> retrieveVersions(int startAt, int maxResults) throws VersionRetrievalException {
 
+        this.loadVersionsCache();
+        
         // Controllo dei parametri
         if(startAt < 0) throw new IllegalArgumentException("Il numero di partenza deve essere maggiore o uguale a 0");
         if(maxResults < 0) throw new IllegalArgumentException("Il numero massimo di risultati deve essere maggiore o uguale a 0");
-
-        logger.log(Level.FINE, () -> "Retrieving versions of " + project.getKey() + " from " + startAt + " to " + maxResults);
-
-        // Costruzione dell'endpoint
-        String endpoint = String.format("%s/project/%s/version?startAt=%s", JiraRestApiConfig.getBaseUrl(), project.getId(), startAt);
-
-        // Aggiunta dei parametri di paginazione
-        if(maxResults > 0) endpoint += "&maxResults=" + maxResults;
-
-        logger.log(Level.FINE, "Endpoint: {0}", endpoint);
-
-        try {
-            // Esecuzione della richiesta GET
-            HttpResponse<String> response = executeGetRequest(endpoint);
-
-            // Parsing della risposta JSON
-            JsonNode rootNode = objectMapper.readTree(response.body());
-            JsonNode values = rootNode.get("values");
-            List<Version> versions = new ArrayList<>();
-
-            // Controllo se values è un array e parsing delle versioni
-            if (values.isArray()) {
-                // Itera su ogni versione
-                for (JsonNode versionNode : values) {
-                    // Parsing della versione
-                    versions.add(parseVersion(versionNode));
-                }
-            }
-
-            return versions;
-
-        } catch (RetrievalException e) {
-            throw new VersionRetrievalException("Errore durante il recupero delle versioni", e);
-        } catch (Exception e) {
-            throw new VersionParsingException("Errore durante il parsing della risposta JSON", e);
-        }
+        
+        // Controllo se startAt è maggiore del numero di versioni
+        if(startAt >= versions.size()) return new ArrayList<>();
+        
+        return new ArrayList<>(versions.values()).subList(startAt, Math.min(startAt + maxResults, versions.size()));
+        
     }
 
+    @Override
+    public Version retrieveVersionById(int id) throws VersionRetrievalException {
+        this.loadVersionsCache();
+        return versions.get(id);
+    }
+
+    /**
+     * Carica la cache delle versioni
+     * @throws VersionRetrievalException Se non è possibile cercare le versioni
+     * @throws VersionParsingException Se non è possibile parsare le versioni
+     */
+    private void loadVersionsCache() throws VersionRetrievalException, VersionParsingException {
+        if (versions == null) {
+            
+            versions = new HashMap<>();
+            
+            int startAt = 0;
+            int maxResults = 1000;
+            int results = 0;
+
+            try {
+                do {
+    
+                    // Recupero del progetto
+                    ApplicationConfig config = new ApplicationConfig();
+                    Project project = config.getSelectedProject();
+                    
+                    // Costruzione dell'endpoint
+                    String endpoint = String.format("%s/project/%s/version?startAt=%s", JiraRestApiConfig.getBaseUrl(), project.getId(), startAt);
+    
+                    // Aggiunta dei parametri di paginazione
+                    if(maxResults > 0) endpoint += "&maxResults=" + maxResults;
+
+                    logger.log(Level.FINE, "Endpoint: {0}", endpoint);
+
+                    // Esecuzione della richiesta GET
+                    HttpResponse<String> response = executeGetRequest(endpoint);
+
+                    // Parsing della risposta JSON
+                    JsonNode rootNode = objectMapper.readTree(response.body());
+                    JsonNode values = rootNode.get("values");
+
+                    // Controllo se values è un array e parsing delle versioni
+                    if (values.isArray()) {
+                        // Itera su ogni versione
+                        for (JsonNode versionNode : values) {
+                            // Parsing della versione
+                            Version version = parseVersion(versionNode);
+                            versions.put(version.getId(), version);
+                            results++;
+                        }
+                    }
+    
+                    startAt += results;
+                } while(results == maxResults);
+
+            } catch (RetrievalException e) {
+                throw new VersionRetrievalException("Errore durante il recupero delle versioni", e);
+            } catch (Exception e) {
+                throw new VersionParsingException("Errore durante il parsing della risposta JSON", e);
+            }
+            
+        }
+    }
+    
     /**
      * Parsing della versione da un nodo JSON
      * @param versionNode Nodo JSON della versione
