@@ -9,7 +9,6 @@ import it.isw2.prediction.exception.version.VersionRetrievalException;
 import it.isw2.prediction.model.Version;
 import it.isw2.prediction.config.JiraRestApiConfig;
 
-import java.io.IOException;
 import java.net.http.HttpResponse;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -49,14 +48,6 @@ public class VersionDaoRest extends DaoRest implements VersionDao {
         try {
             // Esecuzione della richiesta GET
             HttpResponse<String> response = executeGetRequest(endpoint);
-
-            // Controllo dello stato della risposta
-            if (response.statusCode() != 200) {
-                logger.log(Level.SEVERE, "Risposta non valida da JIRA. Status code: {0}", response.statusCode());
-                return Collections.emptyList();
-            }
-
-            logger.log(Level.FINE, "JIRA connection successfully");
 
             // Parsing della risposta JSON
             JsonNode rootNode = objectMapper.readTree(response.body());
