@@ -2,7 +2,7 @@ package it.isw2.prediction.model;
 
 import it.isw2.prediction.VersionRole;
 
-import java.time.LocalDateTime;
+import java.util.Date;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -11,16 +11,16 @@ public class Ticket {
     private int id;
     private String key;
 
-    private LocalDateTime updateDate;
-    private LocalDateTime resolutionDate;
-    private LocalDateTime creationDate;
+    private Date updateDate;
+    private Date resolutionDate;
+    private Date creationDate;
 
     private Version affectedVersion;
     private Version openingVersion;
     private List<Version> fixedVersion = new ArrayList<>();
     private boolean isProportionalVersion;
 
-    public Ticket(int id, String key, LocalDateTime creationDate, LocalDateTime resolutionDate, LocalDateTime updateDate) {
+    public Ticket(int id, String key, Date creationDate, Date resolutionDate, Date updateDate) {
         this.id = id;
         this.key = key;
         this.creationDate = creationDate;
@@ -36,15 +36,15 @@ public class Ticket {
         return key;
     }
 
-    public LocalDateTime getResolutionDate() {
+    public Date getResolutionDate() {
         return resolutionDate;
     }
 
-    public LocalDateTime getCreationDate() {
+    public Date getCreationDate() {
         return creationDate;
     }
 
-    public LocalDateTime getUpdateDate() {
+    public Date getUpdateDate() {
         return updateDate;
     }
 

@@ -4,13 +4,15 @@ import org.eclipse.jgit.lib.AnyObjectId;
 import org.eclipse.jgit.revwalk.RevCommit;
 
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.Date;
+import java.util.List;
 
 public class Commit {
 
     private final RevCommit commit;
 
+    private Version version;
+    
     public Commit(RevCommit revCommit) {
         this.commit = revCommit;
     }
@@ -37,6 +39,17 @@ public class Commit {
 
     public Date getDate() {
         return new Date(commit.getCommitTime());
+    }
+    
+    
+    public Version getVersion() {
+        return version;
+    }
+    
+    public void setVersion(Version version) {
+        if(this.version != null && this.version.equals(version)) return;
+        this.version = version;
+        version.addCommit(this);
     }
 
 }

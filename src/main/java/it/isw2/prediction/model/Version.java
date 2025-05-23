@@ -1,9 +1,8 @@
 package it.isw2.prediction.model;
 
-import it.isw2.prediction.Project;
 import it.isw2.prediction.VersionRole;
 
-import java.time.LocalDate;
+import java.util.Date;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -12,11 +11,13 @@ public class Version {
 
     private int id;
     private String name;
-    private LocalDate releaseDate;
+    private Date releaseDate;
 
     private HashMap<VersionRole, List<Ticket>> linkedTickets = new HashMap<>();
 
-    public Version(int id, String name, LocalDate releaseDate) {
+    private List<Commit> commits = new ArrayList<>();
+
+    public Version(int id, String name, Date releaseDate) {
         this.id = id;
         this.name = name;
         this.releaseDate = releaseDate;
@@ -35,7 +36,7 @@ public class Version {
         return name;
     }
 
-    public LocalDate getReleaseDate() {
+    public Date getReleaseDate() {
         return releaseDate;
     }
 
@@ -60,6 +61,22 @@ public class Version {
 
     public boolean removeTicket(VersionRole versionRole, Ticket ticket) {
         return linkedTickets.get(versionRole).remove(ticket);
+    }
+
+    /* --- COMMITS --- */
+
+    public List<Commit> getCommits() {
+        return commits;
+    }
+
+    public boolean hasCommit(Commit commit) {
+        return commits.contains(commit);
+    }
+
+    public void addCommit(Commit commit) {
+        if (commits.contains(commit)) return;
+        commits.add(commit);
+        commit.setVersion(this);
     }
 
     /* --- FORMATTER --- */

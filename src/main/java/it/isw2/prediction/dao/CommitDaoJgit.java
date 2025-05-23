@@ -1,5 +1,8 @@
 package it.isw2.prediction.dao;
 
+import it.isw2.prediction.config.ApplicationConfig;
+import it.isw2.prediction.config.GitApiConfig;
+import it.isw2.prediction.factory.CommitFactory;
 import it.isw2.prediction.model.Commit;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
@@ -16,7 +19,6 @@ import java.util.logging.Logger;
 
 public class CommitDaoJgit implements CommitDao {
     private static final Logger LOGGER = Logger.getLogger(CommitDaoJgit.class.getName());
-    private static final String REPOSITORY_PATH = "projects/bookkeeper";
 
     @Override
     public List<Commit> retrieveCommits() {
@@ -24,8 +26,10 @@ public class CommitDaoJgit implements CommitDao {
 
         try {
             // Apro il repository Git
+            ApplicationConfig appConfig = new ApplicationConfig();
+            String repoPath = GitApiConfig.getProjectsPath(appConfig.getSelectedProject());
             FileRepositoryBuilder builder = new FileRepositoryBuilder();
-            File gitDir = new File(REPOSITORY_PATH + "/.git");
+            File gitDir = new File(repoPath + "/.git");
 
             try (Repository repository = builder.setGitDir(gitDir)
                     .readEnvironment()
@@ -38,13 +42,15 @@ public class CommitDaoJgit implements CommitDao {
                         .add(repository.resolve("refs/heads/master"))
                         .call();
 
+                CommitFactory commitFactory = CommitFactory.getInstance();
+
                 // Converto i RevCommit in oggetti Commit
                 for (RevCommit revCommit : revCommits) {
-                    Commit commit = new Commit(revCommit);
+                    Commit commit = commitFactory.createCommit(revCommit);
                     commits.add(commit);
                 }
 
-                LOGGER.info("Recuperati " + commits.size() + " commit dal branch master.");
+                LOGGER.log(Level.FINE, "Recuperati {0} commit dal branch master.", commits.size());
             }
 
         } catch (IOException e) {

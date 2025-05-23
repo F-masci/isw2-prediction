@@ -15,13 +15,4 @@ public interface TicketDao {
      */
     List<Ticket> retrieveTickets() throws TicketRetrievalException;
 
-    /**
-     * Ritorna i ticket richiesti
-     * @param startAt Indice del primo ticket da restituire
-     * @param maxResults Numero massimo di ticket da restituire
-     * @return Ticket associati
-     * @throws TicketRetrievalException Se non è possibile cercare i ticket
-     */
-    List<Ticket> retrieveTickets(int startAt, int maxResults) throws TicketRetrievalException;
-
 }
