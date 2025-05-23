@@ -1,7 +1,9 @@
 package it.isw2.prediction.model;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class Method {
 
@@ -10,6 +12,7 @@ public class Method {
     private final String packageName;
 
     private List<Version> versions = new ArrayList<>();
+    private Map<Version, Integer> locPerVersion = new HashMap<>();
 
     public Method(String className, String packageName, String methodName) {
         this.className = className;
@@ -43,9 +46,16 @@ public class Method {
         return versions;
     }
 
-    public void addVersion(Version version) {
+    public void addVersion(Version version, int loc) {
         if (this.versions.contains(version)) return;
         this.versions.add(version);
+        this.locPerVersion.put(version, loc);
+    }
+
+    /* --- FEATURES --- */
+
+    public int getLOC(Version version) {
+        return locPerVersion.get(version);
     }
 
     /* --- FORMATTER --- */

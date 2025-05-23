@@ -38,6 +38,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.AbstractMap;
 
 public class MethodDaoJgit implements MethodDao {
 
@@ -63,6 +64,19 @@ public class MethodDaoJgit implements MethodDao {
                 if(lastCommit != null) lastCommits.add(version.getLastCommit());
             }
 
+            Set<Version> uniqueVersion = new HashSet<>();
+            for (Commit commit : lastCommits) {
+                Version version = commit.getVersion();
+                if (version != null) uniqueVersion.add(version);
+            }
+
+            List<Version> difference = new ArrayList<>();
+            for (Version version : versions) {
+                if (!uniqueVersion.contains(version)) {
+                    difference.add(version);
+                }
+            }
+
             // Apro il repository Git
             ApplicationConfig appConfig = new ApplicationConfig();
             String repoPath = GitApiConfig.getProjectsPath(appConfig.getSelectedProject());
@@ -72,8 +86,7 @@ public class MethodDaoJgit implements MethodDao {
             try (Repository repository = builder.setGitDir(gitDir)
                     .readEnvironment()
                     .findGitDir()
-                    .build();
-                 Git git = new Git(repository)) {
+                    .build()) {
 
                 // Per ogni commit, recupero i file Java ed estraggo i metodi
                 for (Commit commit : lastCommits) addMethodsFromCommit(repository, methods, commit);
@@ -253,29 +266,82 @@ public class MethodDaoJgit implements MethodDao {
                 ObjectId objectId = treeWalk.getObjectId(0);
                 ObjectReader reader = repository.newObjectReader();
 
-                // Leggo il contenuto del file
                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
                 reader.open(objectId).copyTo(outputStream);
                 String content = outputStream.toString();
 
-                // Estraggo package, classe e metodi
                 String packageName = extractPackageName(content);
-                String className = extractClassName(content);
 
-                if (packageName != null && className != null) {
-                    List<String> methodNames = extractMethodNames(content);
+                // La mappa è <className#methodName, loc>
+                Map<String, Integer> methodsWithLoc = extractMethodsWithLOC(content);
 
-                    for (String methodName : methodNames) {
-                        Method method;
-                        if(!methods.containsKey(methodName))
-                            // Se il metodo non esiste, lo creo
-                            methods.put(methodName, new Method(className, packageName, methodName));
-                        method = methods.get(methodName);
-                        method.addVersion(commit.getVersion());
-                    }
+                for (Map.Entry<String, Integer> entry : methodsWithLoc.entrySet()) {
+                    String key = entry.getKey(); // className#methodName
+                    int loc = entry.getValue();
+
+                    String[] parts = key.split("#", 2);
+                    String className = parts[0];
+                    String methodName = parts[1];
+
+                    String uniqueKey = packageName + "." + className + "#" + methodName;
+                    Method method;
+                    if (!methods.containsKey(uniqueKey))
+                        methods.put(uniqueKey, new Method(className, packageName, methodName));
+                    method = methods.get(uniqueKey);
+                    method.addVersion(commit.getVersion(), loc);
                 }
             }
         }
+    }
+
+    /**
+     * Estrae i nomi dei metodi associati alla rispettiva classe e conta le LOC effettive (senza commenti né righe vuote),
+     * includendo le righe della firma e la riga di chiusura della parentesi graffa se presenti.
+     * @param content Contenuto del file
+     * @return Mappa <className#methodName, loc>
+     */
+    private Map<String, Integer> extractMethodsWithLOC(String content) {
+        Map<String, Integer> methodsWithLoc = new HashMap<>();
+
+        try {
+            JavaParser parser = new JavaParser();
+            CompilationUnit cu = parser.parse(content).getResult().orElse(null);
+
+            if (cu == null) {
+                LOGGER.log(Level.WARNING, "Parsing fallito per il contenuto fornito");
+                return methodsWithLoc;
+            }
+
+            String[] lines = content.split("\\r?\\n");
+
+            cu.findAll(MethodDeclaration.class).forEach(method -> {
+                String methodName = method.getNameAsString();
+                String className = method.findAncestor(com.github.javaparser.ast.body.ClassOrInterfaceDeclaration.class)
+                        .map(c -> c.getNameAsString())
+                        .orElse("UnknownClass");
+
+                int loc = 0;
+                if (method.getRange().isPresent()) {
+                    int begin = method.getRange().get().begin.line;
+                    int end = method.getRange().get().end.line;
+                    if (begin > 0 && end <= lines.length) {
+                        boolean inBlockComment = false;
+                        for (int i = begin - 1; i < end; i++) {
+                            String trimmed = lines[i].trim();
+                            if (trimmed.isEmpty()) continue;
+                            if (trimmed.startsWith("/*")) inBlockComment = true;
+                            if (!inBlockComment && !trimmed.startsWith("//")) loc++;
+                            if (inBlockComment && trimmed.endsWith("*/")) inBlockComment = false;
+                        }
+                    }
+                }
+                String key = className + "#" + methodName;
+                methodsWithLoc.put(key, loc);
+            });
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Errore nell'estrazione dei metodi: {0}", e.getMessage());
+        }
+        return methodsWithLoc;
     }
 
     private String extractPackageName(String content) {
@@ -314,5 +380,3 @@ public class MethodDaoJgit implements MethodDao {
     }
 
 }
-
-

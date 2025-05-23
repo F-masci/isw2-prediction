@@ -23,27 +23,26 @@ public class DatasetCreationController {
     private final String SEPARATOR = ";";
 
 
-    private String csvHeader = "Package;Classe;Metodo;Versioni\n";
-    private HashMap<Method, String> csvRecords = new HashMap<>();
+    private String csvHeader = "Package;Classe;Metodo;Versione;LOC\n";
+    private HashMap<String, String> csvRecords = new HashMap<>();
 
     public void createDataset() {
         MethodRepository methodRepository = MethodRepositoryFactory.getInstance().getMethodRepository();
         List<Method> methods = methodRepository.retrieveMethods();
 
         for(Method method : methods) {
-            StringBuilder record = new StringBuilder();
-            record.append(method.getPackageName()).append(SEPARATOR)
-                    .append(method.getClassName()).append(SEPARATOR)
-                    .append(method.getMethodName()).append(SEPARATOR);
-
             List<Version> versions = method.getVersions();
-            versions.sort(Comparator.nullsLast(Comparator.comparing(Version::getName)));
             for (Version version : versions) {
-                record.append(version.getName()).append(",");
+                StringBuilder record = new StringBuilder();
+                record.append(method.getPackageName()).append(SEPARATOR)
+                        .append(method.getClassName()).append(SEPARATOR)
+                        .append(method.getMethodName()).append(SEPARATOR)
+                        .append(version.getName()).append(SEPARATOR)
+                        .append(method.getLOC(version));
+
+                String recordKey = computeCsvRecordKey(method, version);
+                csvRecords.put(recordKey, record.toString() + "\n");
             }
-            // Rimuovi l'ultimo punto e virgola
-            if (record.length() > 0) record.setLength(record.length() - 1);
-            csvRecords.put(method, record.toString() + "\n");
         }
 
         // Scrivere il file CSV
@@ -75,6 +74,12 @@ public class DatasetCreationController {
         } catch (IOException e) {
             LOGGER.log(Level.SEVERE, "Errore durante la creazione del file CSV: " + csvFilePath, e);
         }
+    }
+
+    private String computeCsvRecordKey(Method method, Version version) {
+        final String separator = ";";
+        return method.getFullName() + separator
+                + version.getName();
     }
 
     private String getProjectName() {
