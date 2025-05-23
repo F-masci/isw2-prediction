@@ -29,6 +29,8 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private static final Logger logger = Logger.getLogger(TicketDaoRest.class.getName());
+    private final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
+
 
     @Override
     public List<Ticket> retrieveTickets() throws TicketRetrievalException {
@@ -121,6 +123,9 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
         Date updateDate = null;
         Date resolutionDate = null;
         try {
+
+            dateFormatter.setLenient(true);
+
             creationDate = dateFormatter.parse(fields.get(createdDateField).asText());
             updateDate = dateFormatter.parse(fields.get(updatedField).asText());
             resolutionDate = fields.has(resolutionDateField) && !fields.get(resolutionDateField).isNull()

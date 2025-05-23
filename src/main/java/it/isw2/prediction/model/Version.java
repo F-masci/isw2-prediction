@@ -17,7 +17,7 @@ public class Version {
 
     private EnumMap<VersionRole, List<Ticket>> linkedTickets = null;
 
-    private List<Commit> commits = new ArrayList<>();
+    private List<Commit> commits = null;
 
     public Version(int id, String name, Date releaseDate) {
         this.id = id;
@@ -66,6 +66,17 @@ public class Version {
     public boolean hasCommit(Commit commit) {
         lazyLoadCommits();
         return commits.contains(commit);
+    }
+
+    public Commit getLastCommit() {
+        lazyLoadCommits();
+        Commit lastCommits = null;
+        for (Commit commit : commits) {
+            if (lastCommits == null || commit.getDate().after(lastCommits.getDate())) {
+                lastCommits = commit;
+            }
+        }
+        return lastCommits;
     }
 
     /* --- LAZY LOAD --- */

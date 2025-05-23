@@ -1,6 +1,8 @@
 package it.isw2.prediction.model;
 
 import it.isw2.prediction.VersionRole;
+import it.isw2.prediction.factory.CommitRepositoryFactory;
+import it.isw2.prediction.repository.CommitRepository;
 
 import java.util.Date;
 import java.util.ArrayList;
@@ -8,19 +10,19 @@ import java.util.List;
 
 public class Ticket {
 
-    private int id;
-    private String key;
+    private final int id;
+    private final String key;
 
-    private Date updateDate;
-    private Date resolutionDate;
-    private Date creationDate;
+    private final Date updateDate;
+    private final Date resolutionDate;
+    private final Date creationDate;
 
     private Version affectedVersion;
     private Version openingVersion;
     private Version fixedVersion;
     private boolean isProportionalVersion;
 
-    private List<Commit> commits = new ArrayList<>();
+    private List<Commit> commits = null;
 
     public Ticket(int id, String key, Date creationDate, Date resolutionDate, Date updateDate) {
         this.id = id;
@@ -87,21 +89,26 @@ public class Ticket {
     /* --- COMMITS --- */
 
     public List<Commit> getCommits() {
+        lazyLoadCommits();
         return commits;
     }
 
     public boolean hasCommit(Commit commit) {
+        lazyLoadCommits();
         return commits.contains(commit);
-    }
-
-    public void addCommit(Commit commit) {
-        if (commits.contains(commit)) return;
-        commits.add(commit);
     }
 
     /* --- LAZY LOAD --- */
 
-
+    public void lazyLoadCommits() {
+        if (commits != null) return;
+        commits = new ArrayList<>();
+        CommitRepository commitRepository = CommitRepositoryFactory.getInstance().getCommitRepository();
+        List<Commit> allCommits = commitRepository.retrieveCommits();
+        for (Commit commit : allCommits) {
+            if (commit.getShortMessage().contains(getKey())) this.commits.add(commit);
+        }
+    }
 
     /* --- FORMATTER --- */
 

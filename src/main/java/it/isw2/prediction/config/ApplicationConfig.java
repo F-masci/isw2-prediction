@@ -29,4 +29,8 @@ public class ApplicationConfig {
         return Project.getByKey(this.get("project"));
     }
 
+    public String getDatasetPath() {
+        return this.get("dataset.path");
+    }
+
 }
