@@ -8,7 +8,6 @@ import it.isw2.prediction.repository.TicketRepository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevTree;
 
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 

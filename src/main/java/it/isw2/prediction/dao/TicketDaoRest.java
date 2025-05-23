@@ -7,12 +7,9 @@ import it.isw2.prediction.builder.TicketBuilder;
 import it.isw2.prediction.config.ApplicationConfig;
 import it.isw2.prediction.exception.RetrievalException;
 import it.isw2.prediction.exception.ticket.TicketRetrievalException;
-import it.isw2.prediction.exception.version.VersionRetrievalException;
-import it.isw2.prediction.factory.VersionDaoFactory;
 import it.isw2.prediction.model.Ticket;
 import it.isw2.prediction.exception.ticket.TicketParsingException;
 import it.isw2.prediction.config.JiraApiConfig;
-import it.isw2.prediction.model.Version;
 
 import java.net.URLEncoder;
 import java.net.http.HttpResponse;

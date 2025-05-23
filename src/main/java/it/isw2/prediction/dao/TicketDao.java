@@ -1,6 +1,5 @@
 package it.isw2.prediction.dao;
 
-import it.isw2.prediction.Project;
 import it.isw2.prediction.exception.ticket.TicketRetrievalException;
 import it.isw2.prediction.model.Ticket;
 

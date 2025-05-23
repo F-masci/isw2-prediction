@@ -1,6 +1,5 @@
 package it.isw2.prediction.model;
 
-import it.isw2.prediction.VersionRole;
 import it.isw2.prediction.factory.CommitRepositoryFactory;
 import it.isw2.prediction.repository.CommitRepository;
 

@@ -1,14 +1,9 @@
 package it.isw2.prediction.repository;
 
 import it.isw2.prediction.dao.MethodDao;
-import it.isw2.prediction.dao.MethodDaoJgit;
-import it.isw2.prediction.dao.TicketDao;
-import it.isw2.prediction.exception.ticket.TicketRetrievalException;
 import it.isw2.prediction.factory.MethodDaoFactory;
-import it.isw2.prediction.factory.TicketDaoFactory;
 import it.isw2.prediction.model.Commit;
 import it.isw2.prediction.model.Method;
-import it.isw2.prediction.model.Ticket;
 
 import java.util.List;
 
