@@ -3,25 +3,29 @@ package it.isw2.prediction.model;
 import it.isw2.prediction.VersionRole;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Ticket {
 
     private int id;
     private String key;
 
+    private LocalDateTime updateDate;
     private LocalDateTime resolutionDate;
     private LocalDateTime creationDate;
 
     private Version affectedVersion;
     private Version openingVersion;
-    private Version fixedVersion;
+    private List<Version> fixedVersion = new ArrayList<>();
     private boolean isProportionalVersion;
 
-    public Ticket(int id, String key, LocalDateTime resolutionDate, LocalDateTime creationDate) {
+    public Ticket(int id, String key, LocalDateTime creationDate, LocalDateTime resolutionDate, LocalDateTime updateDate) {
         this.id = id;
         this.key = key;
-        this.resolutionDate = resolutionDate;
         this.creationDate = creationDate;
+        this.resolutionDate = resolutionDate;
+        this.updateDate = updateDate;
     }
 
     public int getId() {
@@ -38,6 +42,10 @@ public class Ticket {
 
     public LocalDateTime getCreationDate() {
         return creationDate;
+    }
+
+    public LocalDateTime getUpdateDate() {
+        return updateDate;
     }
 
     /* --- VERSIONS --- */
@@ -61,13 +69,24 @@ public class Ticket {
         openingVersion.addTicket(VersionRole.OPENED, this);
     }
 
-    public Version getFixedVersion() {
+    public List<Version> getFixedVersions() {
         return fixedVersion;
     }
 
-    public void setFixedVersion(Version fixedVersion) {
-        this.fixedVersion = fixedVersion;
+    public boolean hasFixedVersion(Version version) {
+        return fixedVersion.contains(version);
+    }
+
+    public void addFixedVersion(Version fixedVersion) {
+        if (this.hasFixedVersion(fixedVersion)) return;
+        this.fixedVersion.add(fixedVersion);
         fixedVersion.addTicket(VersionRole.FIXED, this);
+    }
+
+    public void removeFixedVersion(Version fixedVersion) {
+        if(!this.hasFixedVersion(fixedVersion)) return;
+        this.fixedVersion.remove(fixedVersion);
+        fixedVersion.removeTicket(VersionRole.FIXED, this);
     }
 
     public boolean isProportionalVersion() {

@@ -27,6 +27,18 @@
             <version>2.15.2</version>
         </dependency>
 
+        <!-- JGit -->
+        <dependency>
+            <groupId>org.eclipse.jgit</groupId>
+            <artifactId>org.eclipse.jgit</artifactId>
+            <version>7.2.1.202505142326-r</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.javaparser</groupId>
+            <artifactId>javaparser-core</artifactId>
+            <version>3.26.4</version>
+        </dependency>
+
         <!-- Weka -->
         <dependency>
             <groupId>nz.ac.waikato.cms.weka</groupId>

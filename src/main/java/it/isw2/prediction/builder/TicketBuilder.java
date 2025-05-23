@@ -4,6 +4,8 @@ import it.isw2.prediction.model.Ticket;
 import it.isw2.prediction.model.Version;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 public class TicketBuilder {
 
@@ -11,11 +13,11 @@ public class TicketBuilder {
 
     private Version affectedVersion = null;
     private Version openingVersion = null;
-    private Version fixedVersion = null;
+    private List<Version> fixedVersion = new ArrayList<>();
     private boolean isProportionalVersion = false;
 
-    public TicketBuilder (int id, String key, LocalDateTime resolutionDate, LocalDateTime creationDate) {
-        this.ticket = new Ticket(id, key, resolutionDate, creationDate);
+    public TicketBuilder (int id, String key, LocalDateTime creationDate, LocalDateTime resolutionDate, LocalDateTime updateDate) {
+        this.ticket = new Ticket(id, key, creationDate, resolutionDate, updateDate);
     }
 
     public TicketBuilder withAffectedVersion(Version affectedVersion) {
@@ -29,15 +31,15 @@ public class TicketBuilder {
         return this;
     }
 
-    public TicketBuilder withFixedVersion(Version fixedVersion) {
-        this.fixedVersion = fixedVersion;
+    public TicketBuilder addFixedVersion(Version fixedVersion) {
+        this.fixedVersion.add(fixedVersion);
         return this;
     }
 
     public Ticket build() {
         if(this.affectedVersion != null) ticket.setAffectedVersion(affectedVersion, isProportionalVersion);
         if(this.openingVersion != null) ticket.setOpeningVersion(openingVersion);
-        if(this.fixedVersion != null) ticket.setFixedVersion(fixedVersion);
+        for (Version version: this.fixedVersion) ticket.addFixedVersion(version);
         return ticket;
     }
 

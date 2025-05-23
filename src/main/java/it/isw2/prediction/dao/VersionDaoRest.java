@@ -14,6 +14,7 @@ import java.net.http.HttpResponse;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.logging.Level;
@@ -52,6 +53,40 @@ public class VersionDaoRest extends DaoRest implements VersionDao {
     public Version retrieveVersionById(int id) throws VersionRetrievalException {
         this.loadVersionsCache();
         return versions.get(id);
+    }
+
+    @Override
+    public Version retrieveNextVersionByDate(LocalDate date) throws VersionRetrievalException {
+        this.loadVersionsCache();
+
+        // Ordinamento delle versioni in base alla data di rilascio
+        List<Version> orderedVersions = new ArrayList<>(versions.values());
+        orderedVersions.sort(Comparator.comparing(Version::getReleaseDate, Comparator.nullsLast(Comparator.naturalOrder())));
+
+        // Trova la prima versione con data di rilascio successiva alla data fornita
+        for (Version version : orderedVersions) {
+            if (version.getReleaseDate() != null && version.getReleaseDate().isAfter(date)) {
+                return version;
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public Version retrievePreviousVersionByDate(LocalDate date) throws VersionRetrievalException {
+        this.loadVersionsCache();
+
+        // Ordinamento delle versioni in base alla data di rilascio
+        List<Version> orderedVersions = new ArrayList<>(versions.values());
+        orderedVersions.sort(Comparator.comparing(Version::getReleaseDate, Comparator.nullsLast(Comparator.reverseOrder())));
+
+        // Trova la prima versione con data di rilascio precedente alla data fornita
+        for (Version version : orderedVersions) {
+            if (version.getReleaseDate() != null && version.getReleaseDate().isBefore(date)) {
+                return version;
+            }
+        }
+        return null;
     }
 
     /**

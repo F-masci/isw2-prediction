@@ -2,15 +2,17 @@ package it.isw2.prediction;
 
 public enum Project {
 
-    BOOKKEPER("BOOKKEPER", 12311293),
-    OPENJPA("OPENJPA", 12310351);
+    BOOKKEPER("BOOKKEPER", 12311293, "bookkeeper"),
+    OPENJPA("OPENJPA", 12310351, "openjpa"),;
 
     private final String key;
     private final int id;
+    private final String folder;
 
-    Project(String key, int id) {
+    Project(String key, int id, String folder) {
         this.key = key;
         this.id = id;
+        this.folder = folder;
     }
 
     public static Project getByKey(String key) {
@@ -29,6 +31,10 @@ public enum Project {
 
     public int getId() {
         return id;
+    }
+
+    public String getFolder() {
+        return folder;
     }
 
 }
