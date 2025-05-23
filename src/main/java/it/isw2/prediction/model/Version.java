@@ -1,11 +1,13 @@
 package it.isw2.prediction.model;
 
 import it.isw2.prediction.VersionRole;
+import it.isw2.prediction.exception.ticket.TicketRetrievalException;
+import it.isw2.prediction.factory.CommitRepositoryFactory;
+import it.isw2.prediction.factory.TicketRepositoryFactory;
+import it.isw2.prediction.repository.CommitRepository;
+import it.isw2.prediction.repository.TicketRepository;
 
-import java.util.Date;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 
 public class Version {
 
@@ -13,7 +15,7 @@ public class Version {
     private String name;
     private Date releaseDate;
 
-    private HashMap<VersionRole, List<Ticket>> linkedTickets = new HashMap<>();
+    private EnumMap<VersionRole, List<Ticket>> linkedTickets = null;
 
     private List<Commit> commits = new ArrayList<>();
 
@@ -21,11 +23,6 @@ public class Version {
         this.id = id;
         this.name = name;
         this.releaseDate = releaseDate;
-
-        this.linkedTickets.put(VersionRole.AFFECTED, new ArrayList<>());
-        this.linkedTickets.put(VersionRole.OPENED, new ArrayList<>());
-        this.linkedTickets.put(VersionRole.FIXED, new ArrayList<>());
-
     }
 
     public int getId() {
@@ -42,41 +39,57 @@ public class Version {
 
     /* --- TICKETS --- */
 
-    public boolean isLinkedToTicket(Ticket ticket) {
+    public boolean isLinkedToTicket(Ticket ticket) throws TicketRetrievalException {
+        lazyLoadTickets();
         for (VersionRole role : VersionRole.values())
             if(this.linkedTickets.get(role).contains(ticket)) return true;
         return false;
     }
 
-    public boolean isLinkedToTicket(VersionRole versionRole, Ticket ticket) {
+    public boolean isLinkedToTicket(VersionRole versionRole, Ticket ticket) throws TicketRetrievalException {
+        lazyLoadTickets();
         return linkedTickets.get(versionRole).contains(ticket);
     }
 
-    public boolean addTicket(VersionRole versionRole, Ticket ticket) {
-        if (!linkedTickets.get(versionRole).contains(ticket)) {
-            return linkedTickets.get(versionRole).add(ticket);
-        }
-        return false;
-    }
-
-    public boolean removeTicket(VersionRole versionRole, Ticket ticket) {
-        return linkedTickets.get(versionRole).remove(ticket);
+    private void addTicket(VersionRole versionRole, Ticket ticket) {
+        if (linkedTickets.get(versionRole).contains(ticket)) return;
+        linkedTickets.get(versionRole).add(ticket);
     }
 
     /* --- COMMITS --- */
 
     public List<Commit> getCommits() {
+        lazyLoadCommits();
         return commits;
     }
 
     public boolean hasCommit(Commit commit) {
+        lazyLoadCommits();
         return commits.contains(commit);
     }
 
-    public void addCommit(Commit commit) {
-        if (commits.contains(commit)) return;
-        commits.add(commit);
-        commit.setVersion(this);
+    /* --- LAZY LOAD --- */
+
+    private void lazyLoadTickets() throws TicketRetrievalException {
+        if (linkedTickets != null) return;
+        linkedTickets = new EnumMap<>(VersionRole.class);
+        TicketRepository ticketRepository = TicketRepositoryFactory.getInstance().getTicketRepository();
+        List<Ticket> tickets = ticketRepository.retrieveTickets();
+        for(Ticket ticket : tickets) {
+            if(this.equals(ticket.getFixedVersions())) this.addTicket(VersionRole.FIXED, ticket);
+            if(this.equals(ticket.getAffectedVersion())) this.addTicket(VersionRole.AFFECTED, ticket);
+            if(this.equals(ticket.getOpeningVersion())) this.addTicket(VersionRole.OPENING, ticket);
+        }
+    }
+
+    public void lazyLoadCommits() {
+        if (commits != null) return;
+        this.commits = new ArrayList<>();
+        CommitRepository commitRepository = CommitRepositoryFactory.getInstance().getCommitRepository();
+        List<Commit> allCommits = commitRepository.retrieveCommits();
+        for (Commit commit : allCommits) {
+            if (this.equals(commit.getVersion())) this.commits.add(commit);
+        }
     }
 
     /* --- FORMATTER --- */

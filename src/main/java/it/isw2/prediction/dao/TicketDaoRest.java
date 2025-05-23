@@ -142,15 +142,6 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
             }
         }
 
-        // Parsing delle affected versioni
-        if (fields.has(fixedVersionField) && fields.get(fixedVersionField).isArray()) {
-            for (JsonNode versionNode : fields.get(fixedVersionField)) {
-                // Parsing della versione
-                int versionId = versionNode.get("id").asInt();
-                builder.addFixedVersion(versionId);
-            }
-        }
-
         return builder.build();
     }
 }

@@ -1,9 +1,13 @@
 package it.isw2.prediction.factory;
 
 import it.isw2.prediction.model.Commit;
+import it.isw2.prediction.model.Ticket;
 import it.isw2.prediction.model.Version;
+import it.isw2.prediction.repository.TicketRepository;
 import it.isw2.prediction.repository.VersionRepository;
 import org.eclipse.jgit.revwalk.RevCommit;
+
+import java.util.List;
 
 public class CommitFactory {
 
@@ -22,9 +26,7 @@ public class CommitFactory {
 
         VersionRepository versionRepository = VersionRepositoryFactory.getInstance().getVersionRepository();
         Version version = versionRepository.retrieveNextVersionByDate(commit.getDate());
-        if (version != null) {
-            commit.setVersion(version);
-        }
+        if (version != null) commit.setVersion(version);
 
         return commit;
 

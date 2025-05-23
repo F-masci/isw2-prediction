@@ -17,8 +17,10 @@ public class Ticket {
 
     private Version affectedVersion;
     private Version openingVersion;
-    private List<Version> fixedVersion = new ArrayList<>();
+    private Version fixedVersion;
     private boolean isProportionalVersion;
+
+    private List<Commit> commits = new ArrayList<>();
 
     public Ticket(int id, String key, Date creationDate, Date resolutionDate, Date updateDate) {
         this.id = id;
@@ -54,44 +56,52 @@ public class Ticket {
         return affectedVersion;
     }
 
-    public void setAffectedVersion(Version affectedVersion, boolean isProportionalVersion) {
-        this.affectedVersion = affectedVersion;
+    public void setAffectedVersion(Version version, boolean isProportionalVersion) {
+        if (affectedVersion != null && affectedVersion.equals(version)) return;
+        affectedVersion = version;
         this.isProportionalVersion = isProportionalVersion;
-        affectedVersion.addTicket(VersionRole.AFFECTED, this);
     }
 
     public Version getOpeningVersion() {
         return openingVersion;
     }
 
-    public void setOpeningVersion(Version openingVersion) {
-        this.openingVersion = openingVersion;
-        openingVersion.addTicket(VersionRole.OPENED, this);
+    public void setOpeningVersion(Version version) {
+        if (openingVersion != null && openingVersion.equals(version)) return;
+        openingVersion = version;
     }
 
-    public List<Version> getFixedVersions() {
+    public Version getFixedVersions() {
         return fixedVersion;
     }
 
-    public boolean hasFixedVersion(Version version) {
-        return fixedVersion.contains(version);
-    }
-
-    public void addFixedVersion(Version fixedVersion) {
-        if (this.hasFixedVersion(fixedVersion)) return;
-        this.fixedVersion.add(fixedVersion);
-        fixedVersion.addTicket(VersionRole.FIXED, this);
-    }
-
-    public void removeFixedVersion(Version fixedVersion) {
-        if(!this.hasFixedVersion(fixedVersion)) return;
-        this.fixedVersion.remove(fixedVersion);
-        fixedVersion.removeTicket(VersionRole.FIXED, this);
+    public void setFixedVersion(Version version) {
+        if (fixedVersion != null && fixedVersion.equals(version)) return;
+        fixedVersion = version;
     }
 
     public boolean isProportionalVersion() {
         return isProportionalVersion;
     }
+
+    /* --- COMMITS --- */
+
+    public List<Commit> getCommits() {
+        return commits;
+    }
+
+    public boolean hasCommit(Commit commit) {
+        return commits.contains(commit);
+    }
+
+    public void addCommit(Commit commit) {
+        if (commits.contains(commit)) return;
+        commits.add(commit);
+    }
+
+    /* --- LAZY LOAD --- */
+
+
 
     /* --- FORMATTER --- */
 

@@ -6,8 +6,6 @@ import it.isw2.prediction.model.Version;
 import it.isw2.prediction.repository.VersionRepository;
 
 import java.util.Date;
-import java.util.ArrayList;
-import java.util.List;
 
 public class TicketBuilder {
 
@@ -15,7 +13,6 @@ public class TicketBuilder {
 
     private Version affectedVersion = null;
     private Version openingVersion = null;
-    private List<Version> fixedVersion = new ArrayList<>();
     private boolean isProportionalVersion = false;
 
     private final VersionRepository versionRepository;
@@ -37,15 +34,9 @@ public class TicketBuilder {
         return this;
     }
 
-    public TicketBuilder addFixedVersion(int fixedVersionId) {
-        this.fixedVersion.add(versionRepository.retrieveVersionById(fixedVersionId));
-        return this;
-    }
-
     public Ticket build() {
-        if(this.affectedVersion != null) ticket.setAffectedVersion(affectedVersion, isProportionalVersion);
         if(this.openingVersion != null) ticket.setOpeningVersion(openingVersion);
-        for (Version version: this.fixedVersion) ticket.addFixedVersion(version);
+        if(this.affectedVersion != null) ticket.setAffectedVersion(affectedVersion, isProportionalVersion);
         return ticket;
     }
 
