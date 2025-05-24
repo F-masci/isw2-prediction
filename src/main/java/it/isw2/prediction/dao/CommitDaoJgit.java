@@ -47,7 +47,7 @@ public class CommitDaoJgit implements CommitDao {
                 // Converto i RevCommit in oggetti Commit
                 for (RevCommit revCommit : revCommits) {
                     Commit commit = commitFactory.createCommit(revCommit);
-                    commits.add(commit);
+                    if(commit.getVersion() != null) commits.add(commit);
                 }
 
                 LOGGER.log(Level.FINE, "Recuperati {0} commit dal branch master.", commits.size());

@@ -57,8 +57,10 @@ public class CachedCommitRepository implements CommitRepository {
         if (commitCache == null) {
             LOGGER.info("Cache dei commit non inizializzata, creazione della cache");
             commitCache = new HashMap<>();
+
             LOGGER.info("Caricamento della cache dei commit");
             List<Commit> commits = repository.retrieveCommits();
+
             for (Commit commit : commits) {
                 try {
                     commitCache.put(commit.getId(), commit);
@@ -66,6 +68,8 @@ public class CachedCommitRepository implements CommitRepository {
                     LOGGER.warning("Errore durante il caricamento del commit");
                 }
             }
+
+            LOGGER.info(() -> "Cache dei commit caricata con " + commitCache.size() + " commits");
         }
     }
 

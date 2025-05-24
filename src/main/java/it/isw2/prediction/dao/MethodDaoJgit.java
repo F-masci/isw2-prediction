@@ -5,11 +5,13 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import it.isw2.prediction.config.ApplicationConfig;
 import it.isw2.prediction.config.GitApiConfig;
+import it.isw2.prediction.factory.CommitRepositoryFactory;
 import it.isw2.prediction.factory.MethodRepositoryFactory;
 import it.isw2.prediction.factory.VersionRepositoryFactory;
 import it.isw2.prediction.model.Commit;
 import it.isw2.prediction.model.Method;
 import it.isw2.prediction.model.Version;
+import it.isw2.prediction.repository.CommitRepository;
 import it.isw2.prediction.repository.MethodRepository;
 import it.isw2.prediction.repository.VersionRepository;
 import org.eclipse.jgit.api.Git;
@@ -55,27 +57,11 @@ public class MethodDaoJgit implements MethodDao {
         try {
 
             // Recupero l'ultimo commit per ogni versione
-            VersionRepository versionRepository = VersionRepositoryFactory.getInstance().getVersionRepository();
-            List<Version> versions = versionRepository.retrieveVersions();
+            CommitRepository commitRepository = CommitRepositoryFactory.getInstance().getCommitRepository();
+            List<Commit> commits = commitRepository.retrieveCommits();
 
-            List<Commit> lastCommits = new ArrayList<>();
-            for(Version version : versions) {
-                Commit lastCommit = version.getLastCommit();
-                if(lastCommit != null) lastCommits.add(version.getLastCommit());
-            }
-
-            Set<Version> uniqueVersion = new HashSet<>();
-            for (Commit commit : lastCommits) {
-                Version version = commit.getVersion();
-                if (version != null) uniqueVersion.add(version);
-            }
-
-            List<Version> difference = new ArrayList<>();
-            for (Version version : versions) {
-                if (!uniqueVersion.contains(version)) {
-                    difference.add(version);
-                }
-            }
+            // FIXME: per ora prendo solo un piccolo campione di commit
+            commits = commits.subList(0, 20);
 
             // Apro il repository Git
             ApplicationConfig appConfig = new ApplicationConfig();
@@ -89,7 +75,7 @@ public class MethodDaoJgit implements MethodDao {
                     .build()) {
 
                 // Per ogni commit, recupero i file Java ed estraggo i metodi
-                for (Commit commit : lastCommits) addMethodsFromCommit(repository, methods, commit);
+                for (Commit commit : commits) addMethodsFromCommit(repository, methods, commit);
 
                 LOGGER.log(Level.INFO, "Recuperati {0} metodi unici dal progetto.", methods.size());
             }
@@ -253,95 +239,96 @@ public class MethodDaoJgit implements MethodDao {
         return modifiedMethods;
     }
 
-    public void addMethodsFromCommit(Repository repository, Map<String, Method> methods, Commit commit) throws IOException {
-        RevTree tree = commit.getTree();
+    private void addMethodsFromCommit(Repository repository, Map<String, Method> methods, Commit commit) throws IOException {
+        RevCommit parent = commit.getParent();
+        if (parent == null) return; // Se non c'è parent, non posso confrontare
 
-        try (TreeWalk treeWalk = new TreeWalk(repository)) {
-            treeWalk.addTree(tree);
-            treeWalk.setRecursive(true);
-            treeWalk.setFilter(PathSuffixFilter.create(".java"));
+        try (Git git = new Git(repository)) {
+            ObjectReader reader = repository.newObjectReader();
+            CanonicalTreeParser oldTreeIter = new CanonicalTreeParser();
+            oldTreeIter.reset(reader, parent.getTree());
+            CanonicalTreeParser newTreeIter = new CanonicalTreeParser();
+            newTreeIter.reset(reader, commit.getTree());
 
-            while (treeWalk.next()) {
-                String path = treeWalk.getPathString();
-                ObjectId objectId = treeWalk.getObjectId(0);
-                ObjectReader reader = repository.newObjectReader();
+            List<DiffEntry> diffs = git.diff()
+                    .setOldTree(oldTreeIter)
+                    .setNewTree(newTreeIter)
+                    .call();
 
-                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                reader.open(objectId).copyTo(outputStream);
-                String content = outputStream.toString();
+            for (DiffEntry diff : diffs) {
+                if (!diff.getNewPath().endsWith(".java")) continue;
+                if (diff.getChangeType() == DiffEntry.ChangeType.DELETE) continue;
 
-                String packageName = extractPackageName(content);
-
-                // La mappa è <className#methodName, loc>
-                Map<String, Integer> methodsWithLoc = extractMethodsWithLOC(content);
-
-                for (Map.Entry<String, Integer> entry : methodsWithLoc.entrySet()) {
-                    String key = entry.getKey(); // className#methodName
-                    int loc = entry.getValue();
-
-                    String[] parts = key.split("#", 2);
-                    String className = parts[0];
-                    String methodName = parts[1];
-
-                    String uniqueKey = packageName + "." + className + "#" + methodName;
-                    Method method;
-                    if (!methods.containsKey(uniqueKey))
-                        methods.put(uniqueKey, new Method(className, packageName, methodName));
-                    method = methods.get(uniqueKey);
-                    method.addVersion(commit.getVersion(), loc);
+                String oldCode = "";
+                if (diff.getChangeType() != DiffEntry.ChangeType.ADD) {
+                    oldCode = readBlobAsString(repository, diff.getOldId().toObjectId());
                 }
-            }
-        }
-    }
+                String newCode = readBlobAsString(repository, diff.getNewId().toObjectId());
+                if (newCode.isEmpty()) continue;
 
-    /**
-     * Estrae i nomi dei metodi associati alla rispettiva classe e conta le LOC effettive (senza commenti né righe vuote),
-     * includendo le righe della firma e la riga di chiusura della parentesi graffa se presenti.
-     * @param content Contenuto del file
-     * @return Mappa <className#methodName, loc>
-     */
-    private Map<String, Integer> extractMethodsWithLOC(String content) {
-        Map<String, Integer> methodsWithLoc = new HashMap<>();
-
-        try {
-            JavaParser parser = new JavaParser();
-            CompilationUnit cu = parser.parse(content).getResult().orElse(null);
-
-            if (cu == null) {
-                LOGGER.log(Level.WARNING, "Parsing fallito per il contenuto fornito");
-                return methodsWithLoc;
-            }
-
-            String[] lines = content.split("\\r?\\n");
-
-            cu.findAll(MethodDeclaration.class).forEach(method -> {
-                String methodName = method.getNameAsString();
-                String className = method.findAncestor(com.github.javaparser.ast.body.ClassOrInterfaceDeclaration.class)
-                        .map(c -> c.getNameAsString())
-                        .orElse("UnknownClass");
-
-                int loc = 0;
-                if (method.getRange().isPresent()) {
-                    int begin = method.getRange().get().begin.line;
-                    int end = method.getRange().get().end.line;
-                    if (begin > 0 && end <= lines.length) {
-                        boolean inBlockComment = false;
-                        for (int i = begin - 1; i < end; i++) {
-                            String trimmed = lines[i].trim();
-                            if (trimmed.isEmpty()) continue;
-                            if (trimmed.startsWith("/*")) inBlockComment = true;
-                            if (!inBlockComment && !trimmed.startsWith("//")) loc++;
-                            if (inBlockComment && trimmed.endsWith("*/")) inBlockComment = false;
-                        }
+                JavaParser parser = new JavaParser();
+                CompilationUnit oldCu = null;
+                if (!oldCode.isEmpty()) {
+                    try {
+                        oldCu = parser.parse(oldCode).getResult().orElse(null);
+                    } catch (Exception e) {
+                        LOGGER.log(Level.WARNING, "Errore nel parsing del file {0} (versione precedente): {1}",
+                                new Object[]{diff.getOldPath(), e.getMessage()});
+                        continue;
                     }
                 }
-                String key = className + "#" + methodName;
-                methodsWithLoc.put(key, loc);
-            });
+                CompilationUnit newCu;
+                try {
+                    newCu = parser.parse(newCode).getResult().orElse(null);
+                    if (newCu == null) {
+                        LOGGER.log(Level.WARNING, "Parsing fallito per il file {0}", diff.getNewPath());
+                        continue;
+                    }
+                } catch (Exception e) {
+                    LOGGER.log(Level.WARNING, "Errore nel parsing del file {0}: {1}",
+                            new Object[]{diff.getNewPath(), e.getMessage()});
+                    continue;
+                }
+
+                String packageName = null;
+                if (newCu.getPackageDeclaration().isPresent()) {
+                    packageName = newCu.getPackageDeclaration().get().getNameAsString();
+                }
+                if (packageName == null) continue;
+
+                List<MethodDeclaration> oldMethods = oldCu != null ? oldCu.findAll(MethodDeclaration.class) : new ArrayList<>();
+                List<MethodDeclaration> newMethods = newCu.findAll(MethodDeclaration.class);
+
+                for (MethodDeclaration newMethod : newMethods) {
+                    String methodName = newMethod.getNameAsString();
+                    String className = newMethod.findAncestor(com.github.javaparser.ast.body.ClassOrInterfaceDeclaration.class)
+                            .map(c -> c.getNameAsString())
+                            .orElse("UnknownClass");
+                    String uniqueKey = packageName + "." + className + "#" + methodName;
+
+                    // Cerca il metodo corrispondente nel vecchio codice
+                    Optional<MethodDeclaration> oldOpt = oldMethods.stream()
+                            .filter(m -> m.getNameAsString().equals(methodName)
+                                    && m.getParameters().size() == newMethod.getParameters().size())
+                            .findFirst();
+
+                    boolean changed = oldOpt.isEmpty() || !Objects.equals(
+                            oldOpt.get().getBody().map(Object::toString).orElse(""),
+                            newMethod.getBody().map(Object::toString).orElse("")
+                    );
+
+                    if (changed) {
+                        Method method;
+                        if (!methods.containsKey(uniqueKey))
+                            methods.put(uniqueKey, new Method(className, packageName, methodName));
+                        method = methods.get(uniqueKey);
+                        method.parseMethodDeclaration(commit, newMethod);
+                    }
+                }
+            }
         } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Errore nell'estrazione dei metodi: {0}", e.getMessage());
+            LOGGER.log(Level.SEVERE, () -> "Errore nell'analisi del commit: " + e.getMessage());
         }
-        return methodsWithLoc;
     }
 
     private String extractPackageName(String content) {

@@ -47,8 +47,10 @@ public class CachedMethodRepository implements MethodRepository {
         if (methodCache == null) {
             LOGGER.info("Cache dei metodi non inizializzata, creazione della cache");
             methodCache = new HashMap<>();
+
             LOGGER.info("Caricamento della cache dei metodi");
             List<Method> methods = repository.retrieveMethods();
+
             for (Method method : methods) {
                 try {
                     methodCache.put(method.getFullName(), method);
@@ -56,6 +58,8 @@ public class CachedMethodRepository implements MethodRepository {
                     LOGGER.warning("Errore durante il caricamento del metodo");
                 }
             }
+
+            LOGGER.info(() -> "Cache dei metodi caricata con " + methodCache.size() + " metodi");
         }
     }
     

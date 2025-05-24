@@ -90,23 +90,6 @@ public class CachedVersionRepository implements VersionRepository {
     }
 
     /**
-     * Sovrascrive il metodo originale aggiungendo la funzionalità di cache.
-     */
-    @Override
-    public List<Version> retrieveVersions(int startAt, int maxResults) {
-        loadVersionsCache();
-
-        List<Version> allVersions = new ArrayList<>(versionCache.values());
-        int endIndex = Math.min(startAt + maxResults, allVersions.size());
-
-        if (startAt >= allVersions.size()) {
-            return new ArrayList<>();
-        }
-
-        return allVersions.subList(startAt, endIndex);
-    }
-
-    /**
      * Carica la cache delle versioni se non è già stata caricata.
      * Se la cache è già presente, non fa nulla.
      */
@@ -126,7 +109,7 @@ public class CachedVersionRepository implements VersionRepository {
                 }
             }
 
-            LOGGER.info("Cache delle versioni caricata con " + versionCache.size() + " versioni");
+            LOGGER.info(() -> "Cache delle versioni caricata con " + versionCache.size() + " versioni");
         }
     }
 

@@ -70,8 +70,10 @@ public class CachedTicketRepository implements TicketRepository {
         if (ticketCache == null) {
             LOGGER.info("Cache dei ticket non inizializzata, creazione della cache");
             ticketCache = new HashMap<>();
+
             LOGGER.info("Caricamento della cache dei ticket");
             List<Ticket> tickets = repository.retrieveTickets();
+
             for (Ticket ticket : tickets) {
                 try {
                     ticketCache.put(ticket.getId(), ticket);
@@ -79,6 +81,8 @@ public class CachedTicketRepository implements TicketRepository {
                     LOGGER.warning("Errore durante il caricamento del ticket");
                 }
             }
+
+            LOGGER.info(() -> "Cache dei ticket caricata con " + ticketCache.size() + " tickets");
         }
     }
 

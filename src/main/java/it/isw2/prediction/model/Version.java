@@ -83,7 +83,7 @@ public class Version {
         List<Ticket> tickets = ticketRepository.retrieveTickets();
         for(Ticket ticket : tickets) {
             if(this.equals(ticket.getFixedVersions())) this.addTicket(VersionRole.FIXED, ticket);
-            if(this.equals(ticket.getAffectedVersion())) this.addTicket(VersionRole.AFFECTED, ticket);
+            if(ticket.isVersionAffected(this)) this.addTicket(VersionRole.AFFECTED, ticket);
             if(this.equals(ticket.getOpeningVersion())) this.addTicket(VersionRole.OPENING, ticket);
         }
     }

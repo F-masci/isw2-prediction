@@ -2,10 +2,14 @@ package it.isw2.prediction.controller;
 
 import it.isw2.prediction.Project;
 import it.isw2.prediction.config.ApplicationConfig;
+import it.isw2.prediction.factory.CommitRepositoryFactory;
 import it.isw2.prediction.factory.MethodRepositoryFactory;
+import it.isw2.prediction.factory.TicketRepositoryFactory;
 import it.isw2.prediction.model.Method;
 import it.isw2.prediction.model.Version;
+import it.isw2.prediction.repository.CommitRepository;
 import it.isw2.prediction.repository.MethodRepository;
+import it.isw2.prediction.repository.TicketRepository;
 
 import java.io.FileWriter;
 import java.io.IOException;
@@ -23,7 +27,7 @@ public class DatasetCreationController {
     private final String SEPARATOR = ";";
 
 
-    private String csvHeader = "Package;Classe;Metodo;Versione;LOC\n";
+    private String csvHeader = "Package;Classe;Metodo;Versione;LOC;Cyclomatic;Cognitive;MethodHistories;Buggy\n";
     private HashMap<String, String> csvRecords = new HashMap<>();
 
     public void createDataset() {
@@ -38,7 +42,11 @@ public class DatasetCreationController {
                         .append(method.getClassName()).append(SEPARATOR)
                         .append(method.getMethodName()).append(SEPARATOR)
                         .append(version.getName()).append(SEPARATOR)
-                        .append(method.getLOC(version));
+                        .append(method.getLOC(version)).append(SEPARATOR)
+                        .append(method.getCyclomaticComplexity(version)).append(SEPARATOR)
+                        .append(method.getCognitiveComplexity(version)).append(SEPARATOR)
+                        .append(method.getMethodHistories(version)).append(SEPARATOR)
+                        .append(method.isBuggy(version));
 
                 String recordKey = computeCsvRecordKey(method, version);
                 csvRecords.put(recordKey, record.toString() + "\n");

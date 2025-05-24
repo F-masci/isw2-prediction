@@ -108,7 +108,7 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
         final String resolutionDateField = "resolutiondate";
         final String updatedField = "updated";
 
-        final String affectedVersionField = "version";
+        final String affectedVersionField = "versions";
         final String fixedVersionField = "fixVersions";
 
         // Parsing dei campi

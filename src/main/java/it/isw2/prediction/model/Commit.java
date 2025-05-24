@@ -8,6 +8,7 @@ import it.isw2.prediction.repository.TicketRepository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevTree;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -20,7 +21,6 @@ public class Commit {
     private Version version;
     private List<Ticket> linkedTickets = null;
 
-    private List<Method> modifiedMethods = null;
 
     public Commit(RevCommit revCommit) {
         this.revCommit = revCommit;
@@ -87,34 +87,17 @@ public class Commit {
         return linkedTickets.contains(ticket);
     }
 
-    /* --- MODIFIED METHODS --- */
-
-    public List<Method> getModifiedMethods() {
-        lazyLoadModifiedMethods();
-        return modifiedMethods;
-    }
-
-    public boolean hasModifiedMethod(Method method) {
-        lazyLoadModifiedMethods();
-        return modifiedMethods.contains(method);
-    }
-
     /* --- LAZY LOADING --- */
 
     private void lazyLoadTickets() throws TicketRetrievalException {
         if (linkedTickets != null) return;
+        linkedTickets = new ArrayList<>();
         TicketRepository ticketRepository = TicketRepositoryFactory.getInstance().getTicketRepository();
         List<Ticket> tickets = ticketRepository.retrieveTickets();
         for (Ticket ticket : tickets) {
             // Collego il commit al ticket se il messaggio contiene il ticket
-            if (getShortMessage().contains(ticket.getKey())) linkedTickets.add(ticket);
+            if (getMessage().contains(ticket.getKey())) linkedTickets.add(ticket);
         }
-    }
-
-    private void lazyLoadModifiedMethods() {
-        if (modifiedMethods != null) return;
-        MethodRepository methodRepository = MethodRepositoryFactory.getInstance().getMethodRepository();
-        modifiedMethods = methodRepository.retrieveModifiedMethods(this);
     }
 
     /* --- FORMATTER --- */

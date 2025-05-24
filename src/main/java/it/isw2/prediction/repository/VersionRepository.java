@@ -48,13 +48,4 @@ public interface VersionRepository {
      * @return la versione precedente alla data o null se non esiste
      */
     Version retrievePreviousVersionByDate(Date date);
-
-    /**
-     * Recupera un sottoinsieme di versioni.
-     *
-     * @param startAt indice della prima versione da restituire
-     * @param maxResults numero massimo di versioni da restituire
-     * @return lista delle versioni richieste
-     */
-    List<Version> retrieveVersions(int startAt, int maxResults);
 }

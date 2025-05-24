@@ -39,7 +39,6 @@ public class VersionRepositoryImpl implements VersionRepository {
 
     @Override
     public List<Version> retrieveVersions() {
-        LOGGER.info("Recupero di tutte le versioni dal repository");
         try {
             return versionDao.retrieveVersions();
         } catch (VersionRetrievalException e) {
@@ -50,7 +49,6 @@ public class VersionRepositoryImpl implements VersionRepository {
 
     @Override
     public Version retrieveVersionById(int versionId) {
-        LOGGER.info("Ricerca della versione con ID: " + versionId);
         try {
             return retrieveVersions().stream()
                     .filter(version -> version.getId() == versionId)
@@ -64,7 +62,6 @@ public class VersionRepositoryImpl implements VersionRepository {
 
     @Override
     public Version retrieveVersionByName(String versionName) {
-        LOGGER.info("Ricerca della versione con nome: " + versionName);
         try {
             return retrieveVersions().stream()
                     .filter(version -> version.getName().equals(versionName))
@@ -78,7 +75,6 @@ public class VersionRepositoryImpl implements VersionRepository {
 
     @Override
     public Version retrieveNextVersionByDate(Date date) {
-        LOGGER.info("Ricerca della versione successiva alla data: " + date);
         try {
             return retrieveVersions().stream()
                     .filter(version -> version.getReleaseDate() != null && version.getReleaseDate().after(date))
@@ -92,7 +88,6 @@ public class VersionRepositoryImpl implements VersionRepository {
 
     @Override
     public Version retrievePreviousVersionByDate(Date date) {
-        LOGGER.info("Ricerca della versione precedente alla data: " + date);
         try {
             return retrieveVersions().stream()
                     .filter(version -> version.getReleaseDate() != null && version.getReleaseDate().before(date))
@@ -101,24 +96,6 @@ public class VersionRepositoryImpl implements VersionRepository {
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Errore nel recupero della versione precedente alla data: " + date, e);
             return null;
-        }
-    }
-
-    @Override
-    public List<Version> retrieveVersions(int startAt, int maxResults) {
-        LOGGER.info("Recupero di un sottoinsieme di versioni (startAt=" + startAt + ", maxResults=" + maxResults + ")");
-        try {
-            List<Version> allVersions = retrieveVersions();
-            int endIndex = Math.min(startAt + maxResults, allVersions.size());
-
-            if (startAt >= allVersions.size()) {
-                return new ArrayList<>();
-            }
-
-            return allVersions.subList(startAt, endIndex);
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Errore nel recupero di un sottoinsieme di versioni", e);
-            return new ArrayList<>();
         }
     }
 }

@@ -1,7 +1,9 @@
 package it.isw2.prediction.model;
 
 import it.isw2.prediction.factory.CommitRepositoryFactory;
+import it.isw2.prediction.factory.VersionRepositoryFactory;
 import it.isw2.prediction.repository.CommitRepository;
+import it.isw2.prediction.repository.VersionRepository;
 
 import java.util.Date;
 import java.util.ArrayList;
@@ -16,7 +18,7 @@ public class Ticket {
     private final Date resolutionDate;
     private final Date creationDate;
 
-    private Version affectedVersion;
+    private List<Version> affectedVersion;
     private Version openingVersion;
     private Version fixedVersion;
     private boolean isProportionalVersion;
@@ -53,14 +55,35 @@ public class Ticket {
 
     /* --- VERSIONS --- */
 
-    public Version getAffectedVersion() {
+    public boolean isVersionAffected(Version version) {
+        if (affectedVersion == null) return false;
+        for (Version v : affectedVersion)
+            if (v.equals(version)) return true;
+        return false;
+    }
+
+    public List<Version> getAffectedVersions() {
         return affectedVersion;
     }
 
-    public void setAffectedVersion(Version version, boolean isProportionalVersion) {
-        if (affectedVersion != null && affectedVersion.equals(version)) return;
-        affectedVersion = version;
+    public void setBaseAffectedVersion(Version baseVersion, boolean isProportionalVersion) {
+        if (fixedVersion == null || baseVersion == null) return;
+
         this.isProportionalVersion = isProportionalVersion;
+        affectedVersion = new ArrayList<>();
+
+        Date baseDate = baseVersion.getReleaseDate();
+        Date fixedDate = fixedVersion.getReleaseDate();
+
+        VersionRepository versionRepository = VersionRepositoryFactory.getInstance().getVersionRepository();
+        List<Version> allVersions = versionRepository.retrieveVersions();
+
+        for (Version v : allVersions) {
+            Date vDate = v.getReleaseDate();
+            if (vDate != null && !vDate.before(baseDate) && vDate.before(fixedDate)) {
+                affectedVersion.add(v);
+            }
+        }
     }
 
     public Version getOpeningVersion() {
