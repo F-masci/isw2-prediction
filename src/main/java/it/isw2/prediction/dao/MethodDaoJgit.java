@@ -87,7 +87,6 @@ public class MethodDaoJgit implements MethodDao {
         return new ArrayList<>(methods.values());
     }
 
-    @Override
     public List<Method> retrieveModifiedMethods(Commit commit) {
         List<Method> modifiedMethods = new ArrayList<>();
         MethodRepository methodRepository = MethodRepositoryFactory.getInstance().getMethodRepository();
@@ -232,7 +231,7 @@ public class MethodDaoJgit implements MethodDao {
                     }
                 }
             }
-        } catch(GitAPIException | IOException e){
+        } catch(Exception e){
             LOGGER.log(Level.SEVERE, "Errore nell'analisi del commit: {0}", e.getMessage());
         }
 

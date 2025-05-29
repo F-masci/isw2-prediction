@@ -31,30 +31,35 @@ public class DatasetCreationController {
     private HashMap<String, String> csvRecords = new HashMap<>();
 
     public void createDataset() {
-        MethodRepository methodRepository = MethodRepositoryFactory.getInstance().getMethodRepository();
-        List<Method> methods = methodRepository.retrieveMethods();
+        try {
+            MethodRepository methodRepository = MethodRepositoryFactory.getInstance().getMethodRepository();
+            List<Method> methods = methodRepository.retrieveMethods();
 
-        for(Method method : methods) {
-            List<Version> versions = method.getVersions();
-            for (Version version : versions) {
-                StringBuilder record = new StringBuilder();
-                record.append(method.getPackageName()).append(SEPARATOR)
-                        .append(method.getClassName()).append(SEPARATOR)
-                        .append(method.getMethodName()).append(SEPARATOR)
-                        .append(version.getName()).append(SEPARATOR)
-                        .append(method.getLOC(version)).append(SEPARATOR)
-                        .append(method.getCyclomaticComplexity(version)).append(SEPARATOR)
-                        .append(method.getCognitiveComplexity(version)).append(SEPARATOR)
-                        .append(method.getMethodHistories(version)).append(SEPARATOR)
-                        .append(method.isBuggy(version));
+            for (Method method : methods) {
+                List<Version> versions = method.getVersions();
+                for (Version version : versions) {
+                    StringBuilder record = new StringBuilder();
+                    record.append(method.getPackageName()).append(SEPARATOR)
+                            .append(method.getClassName()).append(SEPARATOR)
+                            .append(method.getMethodName()).append(SEPARATOR)
+                            .append(version.getName()).append(SEPARATOR)
+                            .append(method.getLOC(version)).append(SEPARATOR)
+                            .append(method.getCyclomaticComplexity(version)).append(SEPARATOR)
+                            .append(method.getCognitiveComplexity(version)).append(SEPARATOR)
+                            .append(method.getMethodHistories(version)).append(SEPARATOR)
+                            .append(method.isBuggy(version));
 
-                String recordKey = computeCsvRecordKey(method, version);
-                csvRecords.put(recordKey, record.toString() + "\n");
+                    String recordKey = computeCsvRecordKey(method, version);
+                    csvRecords.put(recordKey, record.toString() + "\n");
+                }
             }
-        }
 
-        // Scrivere il file CSV
-        writeCSVFile();
+            // Scrivere il file CSV
+            writeCSVFile();
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Errore durante la creazione del dataset", e);
+            System.exit(1);
+        }
 
     }
 

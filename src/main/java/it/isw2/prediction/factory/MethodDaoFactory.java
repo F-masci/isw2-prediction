@@ -1,6 +1,7 @@
 package it.isw2.prediction.factory;
 
 import it.isw2.prediction.dao.MethodDao;
+import it.isw2.prediction.dao.MethodDaoFile;
 import it.isw2.prediction.dao.MethodDaoJgit;
 
 public class MethodDaoFactory {
@@ -16,6 +17,9 @@ public class MethodDaoFactory {
 
     public MethodDao getMethodDao() {
         return new MethodDaoJgit();
+    }
+    public MethodDaoFile getFileMethodDao() {
+        return new MethodDaoFile();
     }
 
 }

@@ -1,5 +1,7 @@
 package it.isw2.prediction.repository;
 
+import it.isw2.prediction.exception.method.MethodRetrievalException;
+import it.isw2.prediction.exception.method.MethodSaveException;
 import it.isw2.prediction.model.Commit;
 import it.isw2.prediction.model.Method;
 
@@ -23,27 +25,22 @@ public class CachedMethodRepository implements MethodRepository {
     }
 
     @Override
-    public List<Method> retrieveMethods() {
+    public List<Method> retrieveMethods() throws MethodRetrievalException, MethodSaveException {
         loadMethodsCache();
         return new ArrayList<>(repository.retrieveMethods());
     }
 
     @Override
-    public Method retrieveMethodByFullName(String fullName) {
+    public Method retrieveMethodByFullName(String fullName) throws MethodRetrievalException, MethodSaveException {
         loadMethodsCache();
         return methodCache.get(fullName);
-    }
-
-    @Override
-    public List<Method> retrieveModifiedMethods(Commit commit) {
-        return repository.retrieveModifiedMethods(commit);
     }
 
     /**
      * Carica la cache dei metodi se non è già stata caricata.
      * Se la cache è già presente, non fa nulla.
      */
-    private void loadMethodsCache() {
+    private void loadMethodsCache() throws MethodRetrievalException, MethodSaveException {
         if (methodCache == null) {
             LOGGER.info("Cache dei metodi non inizializzata, creazione della cache");
             methodCache = new HashMap<>();
