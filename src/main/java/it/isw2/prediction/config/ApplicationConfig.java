@@ -33,4 +33,8 @@ public class ApplicationConfig {
         return this.get("dataset.path");
     }
 
+    public boolean isMethodCacheEnabled() {
+        return Boolean.parseBoolean(this.get("cache.method"));
+    }
+
 }

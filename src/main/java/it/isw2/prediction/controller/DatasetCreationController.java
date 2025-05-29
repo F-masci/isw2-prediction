@@ -26,20 +26,20 @@ public class DatasetCreationController {
     private static final Logger LOGGER = Logger.getLogger(DatasetCreationController.class.getName());
     private final String SEPARATOR = ";";
 
-
-    private String csvHeader = "Package;Classe;Metodo;Versione;LOC;Cyclomatic;Cognitive;MethodHistories;Buggy\n";
-    private HashMap<String, String> csvRecords = new HashMap<>();
+    private final String csvHeader = "Progetto;Package;Classe;Metodo;Versione;LOC;Cyclomatic;Cognitive;MethodHistories;AddedLines;DeletedLines;Churn;Buggy\n";
+    private final HashMap<String, String> csvRecords = new HashMap<>();
 
     public void createDataset() {
         try {
             MethodRepository methodRepository = MethodRepositoryFactory.getInstance().getMethodRepository();
             List<Method> methods = methodRepository.retrieveMethods();
 
-            for (Method method : methods) {
+            for(Method method : methods) {
                 List<Version> versions = method.getVersions();
                 for (Version version : versions) {
                     StringBuilder record = new StringBuilder();
-                    record.append(method.getPackageName()).append(SEPARATOR)
+                    record.append(getProjectName()).append(SEPARATOR)
+                            .append(method.getPackageName()).append(SEPARATOR)
                             .append(method.getClassName()).append(SEPARATOR)
                             .append(method.getMethodName()).append(SEPARATOR)
                             .append(version.getName()).append(SEPARATOR)
@@ -47,9 +47,14 @@ public class DatasetCreationController {
                             .append(method.getCyclomaticComplexity(version)).append(SEPARATOR)
                             .append(method.getCognitiveComplexity(version)).append(SEPARATOR)
                             .append(method.getMethodHistories(version)).append(SEPARATOR)
+                            .append(method.getAddedLines(version)).append(SEPARATOR)
+                            .append(method.getDeletedLines(version)).append(SEPARATOR)
+                            .append(method.getChurn(version)).append(SEPARATOR)
                             .append(method.isBuggy(version));
 
+                    // Creare la chiave per il record CSV
                     String recordKey = computeCsvRecordKey(method, version);
+                    // Aggiungere il record alla mappa
                     csvRecords.put(recordKey, record.toString() + "\n");
                 }
             }

@@ -1,5 +1,6 @@
 package it.isw2.prediction.repository;
 
+import it.isw2.prediction.config.ApplicationConfig;
 import it.isw2.prediction.dao.MethodDao;
 import it.isw2.prediction.dao.MethodDaoFile;
 import it.isw2.prediction.exception.method.MethodRetrievalException;
@@ -40,7 +41,8 @@ public class MethodRepositoryImpl implements MethodRepository {
             return fileMethodDao.retrieveMethods();
         } catch(MethodRetrievalException _) {
             List<Method> result = methodDao.retrieveMethods();
-            fileMethodDao.saveMethods(result);
+            ApplicationConfig applicationConfig = new ApplicationConfig();
+            if(applicationConfig.isMethodCacheEnabled()) fileMethodDao.saveMethods(result);
             return result;
         }
     }
