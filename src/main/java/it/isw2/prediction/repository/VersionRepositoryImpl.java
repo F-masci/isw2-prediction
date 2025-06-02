@@ -92,9 +92,26 @@ public class VersionRepositoryImpl implements VersionRepository {
             return retrieveVersions().stream()
                     .filter(version -> version.getReleaseDate() != null && version.getReleaseDate().before(date))
                     .max(Comparator.comparing(Version::getReleaseDate))
-                    .orElse(null);
+                    .orElseGet(() -> retrieveVersions().stream()
+                            .filter(version -> version.getReleaseDate() != null)
+                            .min(Comparator.comparing(Version::getReleaseDate))
+                            .orElse(null));
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, e, () -> "Errore nel recupero della versione precedente alla data: " + date);
+            return null;
+        }
+    }
+
+    @Override
+    public List<Version> retrieveVersionsBetweenDates(Date startDate, Date endDate) {
+        try {
+            return retrieveVersions().stream()
+                    .filter(version -> version.getReleaseDate() != null &&
+                            !version.getReleaseDate().before(startDate) &&
+                            !version.getReleaseDate().after(endDate))
+                    .toList();
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, e, () -> "Errore nel recupero della versione tra le date: " + startDate + " e " + endDate);
             return null;
         }
     }

@@ -86,7 +86,24 @@ public class CachedVersionRepository implements VersionRepository {
         return versionCache.values().stream()
                 .filter(version -> version.getReleaseDate() != null && version.getReleaseDate().before(date))
                 .max(Comparator.comparing(Version::getReleaseDate))
-                .orElse(null);
+                .orElseGet(() -> versionCache.values().stream()
+                        .filter(version -> version.getReleaseDate() != null)
+                        .min(Comparator.comparing(Version::getReleaseDate))
+                        .orElse(null));
+    }
+
+    /**
+     * Sovrascrive il metodo originale aggiungendo la funzionalità di cache.
+     */
+    @Override
+    public List<Version> retrieveVersionsBetweenDates(Date startDate, Date endDate) {
+        loadVersionsCache();
+
+        return versionCache.values().stream()
+                .filter(version -> version.getReleaseDate() != null &&
+                        !version.getReleaseDate().before(startDate) &&
+                        !version.getReleaseDate().after(endDate))
+                .toList();
     }
 
     /**

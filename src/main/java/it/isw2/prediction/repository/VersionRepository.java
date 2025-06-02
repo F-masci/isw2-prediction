@@ -48,4 +48,14 @@ public interface VersionRepository {
      * @return la versione precedente alla data o null se non esiste
      */
     Version retrievePreviousVersionByDate(Date date);
+
+    /**
+     * Recupera tutte le versioni rilasciate tra due date specifiche.
+     *
+     * @param startDate data di inizio
+     * @param endDate data di fine
+     * @return lista di versioni rilasciate tra le due date
+     */
+    List<Version> retrieveVersionsBetweenDates(Date startDate, Date endDate);
+
 }

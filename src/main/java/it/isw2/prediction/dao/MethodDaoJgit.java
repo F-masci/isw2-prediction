@@ -182,6 +182,7 @@ public class MethodDaoJgit implements MethodDao {
             }
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, () -> "Errore nell'analisi del commit: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 

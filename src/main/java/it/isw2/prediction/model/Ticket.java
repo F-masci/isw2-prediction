@@ -18,7 +18,7 @@ public class Ticket {
     private final Date resolutionDate;
     private final Date creationDate;
 
-    private List<Version> affectedVersion;
+    private final List<Version> affectedVersions = new ArrayList<>();
     private Version openingVersion;
     private Version fixedVersion;
     private boolean isProportionalVersion;
@@ -56,33 +56,26 @@ public class Ticket {
     /* --- VERSIONS --- */
 
     public boolean isVersionAffected(Version version) {
-        if (affectedVersion == null) return false;
-        for (Version v : affectedVersion)
-            if (v.equals(version)) return true;
-        return false;
+        return affectedVersions.contains(version);
     }
 
     public List<Version> getAffectedVersions() {
-        return affectedVersion;
+        return affectedVersions;
     }
 
     public void setBaseAffectedVersion(Version baseVersion, boolean isProportionalVersion) {
         if (fixedVersion == null || baseVersion == null) return;
 
         this.isProportionalVersion = isProportionalVersion;
-        affectedVersion = new ArrayList<>();
 
         Date baseDate = baseVersion.getReleaseDate();
         Date fixedDate = fixedVersion.getReleaseDate();
 
         VersionRepository versionRepository = VersionRepositoryFactory.getInstance().getVersionRepository();
-        List<Version> allVersions = versionRepository.retrieveVersions();
+        List<Version> versions = versionRepository.retrieveVersionsBetweenDates(baseDate, fixedDate);
 
-        for (Version v : allVersions) {
-            Date vDate = v.getReleaseDate();
-            if (vDate != null && !vDate.before(baseDate) && vDate.before(fixedDate)) {
-                affectedVersion.add(v);
-            }
+        for (Version v : versions) {
+            if(!isVersionAffected(v)) affectedVersions.add(v);
         }
     }
 
@@ -118,6 +111,12 @@ public class Ticket {
     public boolean hasCommit(Commit commit) {
         lazyLoadCommits();
         return commits.contains(commit);
+    }
+
+    public Commit getLastCommit() {
+        lazyLoadCommits();
+        if (commits.isEmpty()) return null;
+        return commits.stream().max((c1, c2) -> c1.getDate().compareTo(c2.getDate())).orElse(null);
     }
 
     /* --- LAZY LOAD --- */

@@ -133,12 +133,18 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
         TicketBuilder builder = new TicketBuilder(Integer.parseInt(id), key, creationDate, resolutionDate, updateDate);
 
         // Parsing delle affected versioni
+        boolean affectedVersion = false;
         if (fields.has(affectedVersionField) && fields.get(affectedVersionField).isArray()) {
             for (JsonNode versionNode : fields.get(affectedVersionField)) {
                 // Parsing della versione
                 int versionId = versionNode.get("id").asInt();
                 builder.withAffectedVersion(versionId);
+                affectedVersion = true;
             }
+        }
+        if(!affectedVersion) {
+            LOGGER.log(Level.INFO, "Utilizzo di proportion sul ticket {0}", key);
+            builder.withProportionalAffectedVersion();
         }
 
         return builder.build();
