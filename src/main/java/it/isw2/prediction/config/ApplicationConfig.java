@@ -32,6 +32,13 @@ public class ApplicationConfig {
     public String getDatasetPath() {
         return this.get("dataset.path");
     }
+    public String getPredictionPath() {
+        return this.get("prediction.path");
+    }
+
+    public int getPredictionLimit() {
+        return Integer.parseInt(this.get("prediction.limit"));
+    }
 
     public boolean isMethodCacheEnabled() {
         return Boolean.parseBoolean(this.get("method.cache"));

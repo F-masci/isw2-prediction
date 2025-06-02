@@ -48,7 +48,7 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
                 LOGGER.log(Level.FINE, () -> "Retrieving tickets of " + project.getKey());
 
                 // Costruzione della query JQL
-                String jql = "project=" + project.getId() + " AND issueType = 'Bug' AND (status = 'closed' OR status = 'resolved') AND resolution = 'fixed'";
+                String jql = "project=" + project.getId() + " AND issueType = 'Bug' AND (status = 'closed' OR status = 'resolved') AND resolution = 'fixed' ORDER BY created ASC";
                 String encodedJql = URLEncoder.encode(jql, StandardCharsets.UTF_8);
 
                 // Costruzione dell'endpoint
@@ -72,7 +72,9 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
                     // Itera su ogni ticket
                     for (JsonNode issue : issues) {
                         // Parsing del ticket
-                        tickets.add(parseTicket(issue));
+                        Ticket ticket = parseTicket(issue);
+                        if(ticket == null) continue;
+                        tickets.add(ticket);
                         results++;
                     }
                 }
@@ -106,7 +108,6 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
         final String updatedField = "updated";
 
         final String affectedVersionField = "versions";
-        // final String fixedVersionField = "fixVersions";
 
         // Parsing dei campi
         String id = issueNode.get(idField).asText();
@@ -143,10 +144,15 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
             }
         }
         if(!affectedVersion) {
-            LOGGER.log(Level.INFO, "Utilizzo di proportion sul ticket {0}", key);
             builder.withProportionalAffectedVersion();
         }
 
-        return builder.build();
+        try {
+            // Costruzione del ticket
+            return builder.build();
+        } catch (RetrievalException e) {
+            LOGGER.warning(e.getMessage());
+            return null;
+        }
     }
 }

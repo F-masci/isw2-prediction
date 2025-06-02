@@ -1,5 +1,6 @@
 package it.isw2.prediction.builder;
 
+import it.isw2.prediction.exception.ticket.TicketRetrievalException;
 import it.isw2.prediction.factory.VersionRepositoryFactory;
 import it.isw2.prediction.model.Commit;
 import it.isw2.prediction.model.Ticket;
@@ -9,9 +10,12 @@ import it.isw2.prediction.repository.VersionRepository;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class TicketBuilder {
 
+    private static final Logger LOGGER = Logger.getLogger(TicketBuilder.class.getName());
     private final Ticket ticket;
 
     private Version affectedVersion = null;
@@ -20,9 +24,10 @@ public class TicketBuilder {
     private boolean isProportionalVersion = false;
 
     // Variabile statica per la proporzione con sliding window
-    private static double proportionValue = 0.5; // Valore di default
+    private static double proportionValue = 1; // Valore di default
     private static final int WINDOW_SIZE = 5; // Dimensione della finestra scorrevole
     private static final List<Double> recentProportions = new ArrayList<>(WINDOW_SIZE);
+    private static int proportionCounter = 0;
 
     private final VersionRepository versionRepository;
 
@@ -62,6 +67,9 @@ public class TicketBuilder {
     public TicketBuilder withProportionalAffectedVersion() {
         if (openingVersion == null || fixedVersion == null) return this;
 
+        TicketBuilder.proportionCounter++;
+        LOGGER.log(Level.INFO, () -> "Utilizzo di proportion sul ticket " + ticket.getKey() + " (contatore: " + proportionCounter + ", valore proporzionale: " + proportionValue + ")");
+
         Version proportionalVersion = computeProportionalVersion();
         if (proportionalVersion != null) {
             this.affectedVersion = proportionalVersion;
@@ -80,30 +88,27 @@ public class TicketBuilder {
         return this;
     }
 
-    public Ticket build() {
+    public Ticket build() throws TicketRetrievalException {
+
+        if(openingVersion == null || fixedVersion == null) throw new TicketRetrievalException("Impossibile costruire il ticket: openingVersion o fixedVersion non sono stati impostati correttamente");
+
         if(this.openingVersion != null) ticket.setOpeningVersion(openingVersion);
         if(this.fixedVersion != null) ticket.setFixedVersion(fixedVersion);
         if (this.affectedVersion != null) {
             ticket.setBaseAffectedVersion(affectedVersion, isProportionalVersion);
 
-            // Se è stata usata la proporzione, memorizza il risultato effettivo
-            if (isProportionalVersion) {
-                // Il ticket potrebbe avere più affected versions, prendiamo la prima come indicatore
-                List<Version> affectedVersions = ticket.getAffectedVersions();
-                if (affectedVersions != null && !affectedVersions.isEmpty()) {
-                    Version firstAffected = affectedVersions.get(0);
-                    List<Version> allVersions = versionRepository.retrieveVersionsBetweenDates(
-                            openingVersion.getReleaseDate(),
-                            fixedVersion.getReleaseDate()
-                    );
+            // Se non è stata usata la proporzione, memorizza il risultato effettivo
+            if (!isProportionalVersion) {
+                List<Version> versions = versionRepository.retrieveVersions();
 
-                    // Calcola la proporzione effettiva
-                    int totalVersions = allVersions.size();
-                    int affectedIndex = allVersions.indexOf(firstAffected);
-                    if (totalVersions > 0 && affectedIndex >= 0) {
-                        double actualProportion = (double) affectedIndex / totalVersions;
-                        updateProportionValue(actualProportion);
-                    }
+                // Calcola la proporzione effettiva
+                int fixedIndex = versions.indexOf(fixedVersion);
+                int openingIndex = versions.indexOf(openingVersion);
+                int injectedIndex = versions.indexOf(affectedVersion);
+
+                if (fixedIndex - openingIndex > 0) {
+                    double actualProportion = (double) (fixedIndex - injectedIndex) / (fixedIndex - openingIndex);
+                    updateProportionValue(actualProportion);
                 }
             }
         }
@@ -120,20 +125,16 @@ public class TicketBuilder {
         if (openingVersion == null || fixedVersion == null) return null;
 
         // Ottieni tutte le versioni tra opening e fixed
-        List<Version> intermediateVersions = versionRepository.retrieveVersionsBetweenDates(
-                openingVersion.getReleaseDate(),
-                fixedVersion.getReleaseDate()
-        );
+        List<Version> versions = versionRepository.retrieveVersions();
 
-        if (intermediateVersions.isEmpty()) return openingVersion;
+        if (versions.isEmpty()) return openingVersion;
+
+        int fixedIndex = versions.indexOf(fixedVersion);
+        int openingIndex = versions.indexOf(openingVersion);
 
         // Calcola l'indice proporzionale
-        int proportionalIndex = (int)(intermediateVersions.size() * proportionValue);
-        if (proportionalIndex >= intermediateVersions.size()) {
-            proportionalIndex = intermediateVersions.size() - 1;
-        }
-
-        return intermediateVersions.get(proportionalIndex);
+        int proportionalIndex = (int) (fixedIndex - (fixedIndex - openingIndex) * proportionValue);
+        return versions.get(proportionalIndex);
     }
 
     /**
@@ -143,7 +144,7 @@ public class TicketBuilder {
     public static void updateProportionValue(double actualProportion) {
         // Aggiungi il nuovo valore alla lista delle proporzioni recenti
         if (recentProportions.size() >= WINDOW_SIZE) {
-            recentProportions.remove(0);
+            recentProportions.removeFirst();
         }
         recentProportions.add(actualProportion);
 
@@ -154,32 +155,6 @@ public class TicketBuilder {
         }
 
         proportionValue = sum / recentProportions.size();
-    }
-
-    /**
-     * Ottiene il valore corrente della proporzione
-     * @return il valore della proporzione
-     */
-    public static double getProportionValue() {
-        return proportionValue;
-    }
-
-    /**
-     * Imposta manualmente il valore della proporzione
-     * @param value il nuovo valore di proporzione (tra 0 e 1)
-     */
-    public static void setProportionValue(double value) {
-        if (value < 0) value = 0;
-        if (value > 1) value = 1;
-        proportionValue = value;
-    }
-
-    /**
-     * Resetta lo stato della sliding window
-     */
-    public static void resetSlidingWindow() {
-        recentProportions.clear();
-        proportionValue = 0.5; // Ripristina il valore predefinito
     }
 
 }

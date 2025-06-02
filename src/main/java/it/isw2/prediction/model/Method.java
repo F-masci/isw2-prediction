@@ -162,14 +162,15 @@ public class Method {
 
     public void parseMethodDeclaration(Commit commit, MethodDeclaration methodDeclaration) throws TicketRetrievalException {
         this.addVersion(commit.getVersion());
-        this.methodInfoPerCommit.put(commit, computeMethodInfo(methodDeclaration));
-        this.locPerCommit.put(commit, computeLOC(methodDeclaration));
-        this.cyclomaticComplexityPerCommit.put(commit, computeCyclomaticComplexity(methodDeclaration));
-        this.cognitiveComplexityPerCommit.put(commit, computeCognitiveComplexity(methodDeclaration));
-        this.methodHistoriesPerVersion.put(commit.getVersion(), this.methodHistoriesPerVersion.getOrDefault(commit.getVersion(), 0) + 1);
-        this.branchPointsPerCommit.put(commit, computeBranchPoints(methodDeclaration));
-        this.nestingDepthPerCommit.put(commit, computeNestingDepth(methodDeclaration));
-        this.parametersCountPerCommit.put(commit, computeParametersCount(methodDeclaration));
+        boolean deleted = (methodDeclaration == null);
+        this.methodInfoPerCommit.put(commit, deleted ? null : computeMethodInfo(methodDeclaration));
+        this.locPerCommit.put(commit, deleted ? 0 : computeLOC(methodDeclaration));
+        this.cyclomaticComplexityPerCommit.put(commit, deleted ? 0 : computeCyclomaticComplexity(methodDeclaration));
+        this.cognitiveComplexityPerCommit.put(commit, deleted ? 0 : computeCognitiveComplexity(methodDeclaration));
+        this.branchPointsPerCommit.put(commit, deleted ? 0 : computeBranchPoints(methodDeclaration));
+        this.nestingDepthPerCommit.put(commit, deleted ? 0 : computeNestingDepth(methodDeclaration));
+        this.parametersCountPerCommit.put(commit, deleted ? 0 : computeParametersCount(methodDeclaration));
+        this.methodHistoriesPerVersion.put(commit.getVersion(), computeMethodHistories(commit.getVersion()));
         this.computeIfBuggy(commit);
     }
 
@@ -387,6 +388,13 @@ public class Method {
             if (trimmed.equals("}") && nesting > 0) nesting--;
         }
         return complexity;
+    }
+
+    /**
+     * Aggiorna le storie del metodo per la versione specificata.
+     */
+    private int computeMethodHistories(Version version) {
+        return this.methodHistoriesPerVersion.getOrDefault(version, 0) + 1;
     }
 
     /**

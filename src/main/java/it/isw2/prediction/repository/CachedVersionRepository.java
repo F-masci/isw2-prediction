@@ -39,7 +39,9 @@ public class CachedVersionRepository implements VersionRepository {
     @Override
     public List<Version> retrieveVersions() {
         loadVersionsCache();
-        return new ArrayList<>(versionCache.values());
+        return new ArrayList<>(versionCache.values().stream()
+                .sorted(Comparator.comparing(Version::getReleaseDate))
+                .toList());
     }
 
     /**
@@ -103,6 +105,7 @@ public class CachedVersionRepository implements VersionRepository {
                 .filter(version -> version.getReleaseDate() != null &&
                         !version.getReleaseDate().before(startDate) &&
                         !version.getReleaseDate().after(endDate))
+                .sorted(Comparator.comparing(Version::getReleaseDate))
                 .toList();
     }
 

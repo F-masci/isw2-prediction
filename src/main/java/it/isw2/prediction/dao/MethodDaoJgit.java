@@ -2,17 +2,21 @@ package it.isw2.prediction.dao;
 
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import it.isw2.prediction.config.ApplicationConfig;
 import it.isw2.prediction.config.GitApiConfig;
+import it.isw2.prediction.exception.ticket.TicketRetrievalException;
 import it.isw2.prediction.factory.CommitRepositoryFactory;
 import it.isw2.prediction.model.Commit;
 import it.isw2.prediction.model.Method;
 import it.isw2.prediction.repository.CommitRepository;
 import it.isw2.prediction.utils.Utils;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
+import org.eclipse.jgit.lib.AbbreviatedObjectId;
 import org.eclipse.jgit.lib.ObjectReader;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
@@ -24,7 +28,6 @@ import java.io.IOException;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.regex.Pattern;
 
 public class MethodDaoJgit implements MethodDao {
 
@@ -70,119 +73,230 @@ public class MethodDaoJgit implements MethodDao {
         return new ArrayList<>(methods.values());
     }
 
+    /**
+     * Aggiunge i metodi presenti in un commit al repository dei metodi.
+     *
+     * @param repository il repository Git
+     * @param methods    la mappa dei metodi da aggiornare
+     * @param commit     il commit corrente da analizzare
+     * @throws IOException se si verifica un errore durante l'accesso al repository
+     */
     private void addMethodsFromCommit(Repository repository, Map<String, Method> methods, Commit commit) throws IOException {
         RevCommit parent = commit.getParent();
         if (parent == null) return; // Se non c'è parent, non posso confrontare
 
         try (Git git = new Git(repository)) {
-            ObjectReader reader = repository.newObjectReader();
-            CanonicalTreeParser oldTreeIter = new CanonicalTreeParser();
-            oldTreeIter.reset(reader, parent.getTree());
-            CanonicalTreeParser newTreeIter = new CanonicalTreeParser();
-            newTreeIter.reset(reader, commit.getTree());
-
-            List<DiffEntry> diffs = git.diff()
-                    .setOldTree(oldTreeIter)
-                    .setNewTree(newTreeIter)
-                    .call();
+            // Ottiene le modifiche tra il commit attuale e il parent
+            List<DiffEntry> diffs = computeDiffs(repository, git, parent, commit);
 
             for (DiffEntry diff : diffs) {
-                boolean isDeleted = diff.getChangeType() == DiffEntry.ChangeType.DELETE;
-                if (!diff.getNewPath().endsWith(".java") && !isDeleted) continue;
-                if ((diff.getNewPath().contains("/test/") || (isDeleted && diff.getOldPath().contains("/test/")))) continue;
+                if (isTestOrNonJavaFile(diff)) continue; // Esclude file non-Java o di test
 
-                String oldCode = "";
-                if (diff.getChangeType() != DiffEntry.ChangeType.ADD) {
-                    oldCode = Utils.readBlobAsString(repository, diff.getOldId().toObjectId());
-                }
-                String newCode = isDeleted ? "" : Utils.readBlobAsString(repository, diff.getNewId().toObjectId());
-                if (!isDeleted && newCode.isEmpty()) continue;
+                // Recupera il contenuto del file prima e dopo il commit (se esiste)
+                String oldCode = getCode(repository, diff.getOldId(), diff.getChangeType() != DiffEntry.ChangeType.ADD);
+                String newCode = getCode(repository, diff.getNewId(), diff.getChangeType() != DiffEntry.ChangeType.DELETE);
+                if (diff.getChangeType() != DiffEntry.ChangeType.DELETE && newCode.isEmpty()) continue;
 
-                JavaParser parser = new JavaParser();
-                CompilationUnit oldCu = null;
-                if (!oldCode.isEmpty()) {
-                    try {
-                        oldCu = parser.parse(oldCode).getResult().orElse(null);
-                    } catch (Exception e) {
-                        LOGGER.log(Level.WARNING, "Errore nel parsing del file {0} (versione precedente): {1}",
-                                new Object[]{diff.getOldPath(), e.getMessage()});
-                        continue;
-                    }
-                }
-                CompilationUnit newCu = null;
-                if (!isDeleted) {
-                    try {
-                        newCu = parser.parse(newCode).getResult().orElse(null);
-                        if (newCu == null) {
-                            LOGGER.log(Level.WARNING, "Parsing fallito per il file {0}", diff.getNewPath());
-                            continue;
-                        }
-                    } catch (Exception e) {
-                        LOGGER.log(Level.WARNING, "Errore nel parsing del file {0}: {1}",
-                                new Object[]{diff.getNewPath(), e.getMessage()});
-                        continue;
-                    }
-                }
+                // Parsing dei sorgenti Java
+                CompilationUnit oldCu = tryParse(diff.getOldPath(), oldCode, true);
+                CompilationUnit newCu = diff.getChangeType() == DiffEntry.ChangeType.DELETE ? null : tryParse(diff.getNewPath(), newCode, false);
+                if (diff.getChangeType() != DiffEntry.ChangeType.DELETE && newCu == null) continue;
 
-                String packageName = null;
-                if (!isDeleted && newCu.getPackageDeclaration().isPresent()) {
-                    packageName = newCu.getPackageDeclaration().get().getNameAsString();
-                } else if (isDeleted && oldCu != null && oldCu.getPackageDeclaration().isPresent()) {
-                    packageName = oldCu.getPackageDeclaration().get().getNameAsString();
-                }
+                // Recupera il nome del package (da uno dei due CU disponibili)
+                String packageName = extractPackageName(newCu, oldCu);
                 if (packageName == null) continue;
 
+                // Estrae tutti i metodi dichiarati nelle versioni vecchia e nuova del file
                 List<MethodDeclaration> oldMethods = oldCu != null ? oldCu.findAll(MethodDeclaration.class) : new ArrayList<>();
-                List<MethodDeclaration> newMethods = !isDeleted && newCu != null ? newCu.findAll(MethodDeclaration.class) : new ArrayList<>();
+                List<MethodDeclaration> newMethods = newCu != null ? newCu.findAll(MethodDeclaration.class) : new ArrayList<>();
 
-                // Processa i metodi cancellati
-                if (isDeleted) {
-                    for (MethodDeclaration oldMethod : oldMethods) {
-                        String methodName = oldMethod.getNameAsString();
-                        String className = oldMethod.findAncestor(ClassOrInterfaceDeclaration.class)
-                                .map(c -> c.getNameAsString())
-                                .orElse("UnknownClass");
-                        String uniqueKey = packageName + "." + className + "#" + methodName;
-                        Method method;
-                        if (!methods.containsKey(uniqueKey))
-                            methods.put(uniqueKey, new Method(className, packageName, methodName));
-                        method = methods.get(uniqueKey);
-                        method.parseMethodDeclaration(commit, oldMethod);
-                        method.parseDiffEntry(repository, commit, diff);
-                    }
-                }
-
-                for (MethodDeclaration newMethod : newMethods) {
-                    String methodName = newMethod.getNameAsString();
-                    String className = newMethod.findAncestor(ClassOrInterfaceDeclaration.class)
-                            .map(c -> c.getNameAsString())
-                            .orElse("UnknownClass");
-                    String uniqueKey = packageName + "." + className + "#" + methodName;
-
-                    // Cerca il metodo corrispondente nel vecchio codice
-                    Optional<MethodDeclaration> oldOpt = oldMethods.stream()
-                            .filter(m -> m.getNameAsString().equals(methodName)
-                                    && m.getParameters().size() == newMethod.getParameters().size())
-                            .findFirst();
-
-                    boolean changed = oldOpt.isEmpty() || !Objects.equals(
-                            oldOpt.get().getBody().map(Object::toString).orElse(""),
-                            newMethod.getBody().map(Object::toString).orElse("")
-                    );
-
-                    if (changed) {
-                        Method method;
-                        if (!methods.containsKey(uniqueKey))
-                            methods.put(uniqueKey, new Method(className, packageName, methodName));
-                        method = methods.get(uniqueKey);
-                        method.parseMethodDeclaration(commit, newMethod);
-                        method.parseDiffEntry(repository, commit, diff);
-                    }
+                // Analizza i metodi eliminati
+                if (diff.getChangeType() == DiffEntry.ChangeType.DELETE) {
+                    processDeletedMethods(oldMethods, methods, packageName, commit, diff, repository);
+                } else {
+                    // Analizza i metodi aggiunti o modificati
+                    processNewOrChangedMethods(newMethods, oldMethods, methods, packageName, commit, diff, repository);
                 }
             }
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, () -> "Errore nell'analisi del commit: " + e.getMessage());
-            e.printStackTrace();
+            LOGGER.log(Level.SEVERE, e, () -> "Errore nell'analisi del commit: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Calcola le differenze tra due commit utilizzando JGit.
+     *
+     * @param repository il repository Git
+     * @param git        l'istanza di Git
+     * @param parent     il commit genitore
+     * @param commit     il commit corrente
+     * @return la lista delle differenze tra i due commit
+     * @throws IOException se si verifica un errore durante l'accesso al repository
+     * @throws GitAPIException se si verifica un errore durante l'esecuzione del comando diff
+     */
+    private List<DiffEntry> computeDiffs(Repository repository, Git git, RevCommit parent, Commit commit) throws IOException, GitAPIException {
+        ObjectReader reader = repository.newObjectReader();
+
+        CanonicalTreeParser oldTreeIter = new CanonicalTreeParser();
+        oldTreeIter.reset(reader, parent.getTree());
+
+        CanonicalTreeParser newTreeIter = new CanonicalTreeParser();
+        newTreeIter.reset(reader, commit.getTree());
+
+        return git.diff()
+                .setOldTree(oldTreeIter)
+                .setNewTree(newTreeIter)
+                .call();
+    }
+
+    /**
+     * Verifica se il file è un test o non è un file Java.
+     *
+     * @param diff l'oggetto DiffEntry che rappresenta la modifica
+     * @return true se il file è un test o non è un file Java, false altrimenti
+     */
+    private boolean isTestOrNonJavaFile(DiffEntry diff) {
+        boolean isDeleted = diff.getChangeType() == DiffEntry.ChangeType.DELETE;
+        String path = isDeleted ? diff.getOldPath() : diff.getNewPath();
+        return !path.endsWith(".java") || path.contains("/test/");
+    }
+
+    /**
+     * Recupera il codice sorgente da un file nel repository Git.
+     *
+     * @param repo il repository Git
+     * @param id   l'ID abbreviato dell'oggetto (blob)
+     * @param shouldRead indica se leggere il blob o meno
+     * @return il contenuto del blob come stringa, o una stringa vuota in caso di errore
+     */
+    private String getCode(Repository repo, AbbreviatedObjectId id, boolean shouldRead) {
+        if (!shouldRead || id == null) return "";
+        try {
+            return Utils.readBlobAsString(repo, id.toObjectId());
+        } catch (Exception _) {
+            return "";
+        }
+    }
+
+    /**
+     * Tenta di analizzare il codice sorgente in un CompilationUnit.
+     *
+     * @param path il percorso del file
+     * @param code il codice sorgente da analizzare
+     * @param isOld indica se si tratta della versione precedente del file
+     * @return il CompilationUnit risultante, o null in caso di errore
+     */
+    private CompilationUnit tryParse(String path, String code, boolean isOld) {
+        if (code.isEmpty()) return null;
+        try {
+            JavaParser parser = new JavaParser();
+            return parser.parse(code).getResult().orElse(null);
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Errore nel parsing del file {0} {1}: {2}",
+                    new Object[]{path, isOld ? "(versione precedente)" : "", e.getMessage()});
+            return null;
+        }
+    }
+
+    /**
+     * Estrae il nome del package da una CompilationUnit, preferendo la nuova versione se disponibile.
+     *
+     * @param newCu la CompilationUnit della nuova versione del file
+     * @param oldCu la CompilationUnit della vecchia versione del file
+     * @return il nome del package come stringa, o null se non presente
+     */
+    private String extractPackageName(CompilationUnit newCu, CompilationUnit oldCu) {
+        if (newCu != null) {
+            Optional<PackageDeclaration> pkg = newCu.getPackageDeclaration();
+            if (pkg.isPresent()) {
+                return pkg.get().getNameAsString();
+            }
+        }
+
+        if (oldCu != null) {
+            Optional<PackageDeclaration> pkg = oldCu.getPackageDeclaration();
+            if (pkg.isPresent()) {
+                return pkg.get().getNameAsString();
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Processa i metodi eliminati rispetto alla versione precedente.
+     *
+     * @param oldMethods  la lista dei metodi nella versione precedente
+     * @param methods     la mappa dei metodi da aggiornare
+     * @param packageName il nome del package del file
+     * @param commit      il commit corrente
+     * @param diff        l'oggetto DiffEntry che rappresenta la modifica
+     * @param repo        il repository Git
+     */
+    private void processDeletedMethods(List<MethodDeclaration> oldMethods, Map<String, Method> methods,
+                                       String packageName, Commit commit, DiffEntry diff, Repository repo) throws TicketRetrievalException {
+        for (MethodDeclaration oldMethod : oldMethods) {
+            String methodName = oldMethod.getNameAsString();
+            String className = oldMethod.findAncestor(ClassOrInterfaceDeclaration.class)
+                    .map(ClassOrInterfaceDeclaration::getNameAsString)
+                    .orElse("UnknownClass");
+
+            // Costruisce una chiave unica per il metodo
+            String key = packageName + "." + className + "#" + methodName;
+
+            // Aggiunge il metodo alla mappa se non presente
+            methods.computeIfAbsent(key, k -> new Method(className, packageName, methodName));
+            Method method = methods.get(key);
+
+            // Registra il fatto che il metodo è stato rimosso (newMethod = null)
+            method.parseMethodDeclaration(commit, null);
+            method.parseDiffEntry(repo, commit, diff);
+        }
+    }
+
+    /**
+     * Processa i metodi nuovi o modificati rispetto alla versione precedente.
+     *
+     * @param newMethods   la lista dei metodi nella nuova versione
+     * @param oldMethods   la lista dei metodi nella versione precedente
+     * @param methods      la mappa dei metodi da aggiornare
+     * @param packageName  il nome del package del file
+     * @param commit       il commit corrente
+     * @param diff         l'oggetto DiffEntry che rappresenta la modifica
+     * @param repo         il repository Git
+     */
+    private void processNewOrChangedMethods(List<MethodDeclaration> newMethods, List<MethodDeclaration> oldMethods,
+                                            Map<String, Method> methods, String packageName,
+                                            Commit commit, DiffEntry diff, Repository repo) throws TicketRetrievalException {
+        for (MethodDeclaration newMethod : newMethods) {
+            String methodName = newMethod.getNameAsString();
+            String className = newMethod.findAncestor(ClassOrInterfaceDeclaration.class)
+                    .map(ClassOrInterfaceDeclaration::getNameAsString)
+                    .orElse("UnknownClass");
+
+            // Costruisce una chiave unica per il metodo
+            String key = packageName + "." + className + "#" + methodName;
+
+            // Cerca un metodo con lo stesso nome e numero di parametri nella versione precedente
+            Optional<MethodDeclaration> oldOpt = oldMethods.stream()
+                    .filter(m -> m.getNameAsString().equals(methodName)
+                            && m.getParameters().size() == newMethod.getParameters().size())
+                    .findFirst();
+
+            // Confronta il corpo del metodo per vedere se è cambiato
+            boolean changed = oldOpt.isEmpty() || !Objects.equals(
+                    oldOpt.get().getBody().map(Object::toString).orElse(""),
+                    newMethod.getBody().map(Object::toString).orElse("")
+            );
+
+            if (changed) {
+                // Aggiunge o aggiorna il metodo modificato
+                methods.computeIfAbsent(key, k -> new Method(className, packageName, methodName));
+                Method method = methods.get(key);
+
+                method.parseMethodDeclaration(commit, newMethod);
+                method.parseDiffEntry(repo, commit, diff);
+            }
         }
     }
 

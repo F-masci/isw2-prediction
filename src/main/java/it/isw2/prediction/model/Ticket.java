@@ -5,9 +5,11 @@ import it.isw2.prediction.factory.VersionRepositoryFactory;
 import it.isw2.prediction.repository.CommitRepository;
 import it.isw2.prediction.repository.VersionRepository;
 
+import java.util.Comparator;
 import java.util.Date;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class Ticket {
 
@@ -63,6 +65,11 @@ public class Ticket {
         return affectedVersions;
     }
 
+    public Version getBaseAffectedVersion() {
+        if (affectedVersions.isEmpty()) return null;
+        return affectedVersions.getFirst();
+    }
+
     public void setBaseAffectedVersion(Version baseVersion, boolean isProportionalVersion) {
         if (fixedVersion == null || baseVersion == null) return;
 
@@ -72,10 +79,13 @@ public class Ticket {
         Date fixedDate = fixedVersion.getReleaseDate();
 
         VersionRepository versionRepository = VersionRepositoryFactory.getInstance().getVersionRepository();
-        List<Version> versions = versionRepository.retrieveVersionsBetweenDates(baseDate, fixedDate);
+        List<Version> versions = versionRepository.retrieveVersionsBetweenDates(baseDate, fixedDate).stream()
+                .sorted(Comparator.comparing(Version::getReleaseDate))
+                .toList();
 
         for (Version v : versions) {
-            if(!isVersionAffected(v)) affectedVersions.add(v);
+            // Controlla se la versione è già presente e se non è la versione di chiusura
+            if(!isVersionAffected(v) && !v.equals(fixedVersion)) affectedVersions.add(v);
         }
     }
 
@@ -116,7 +126,7 @@ public class Ticket {
     public Commit getLastCommit() {
         lazyLoadCommits();
         if (commits.isEmpty()) return null;
-        return commits.stream().max((c1, c2) -> c1.getDate().compareTo(c2.getDate())).orElse(null);
+        return commits.stream().max(Comparator.comparing(Commit::getDate)).orElse(null);
     }
 
     /* --- LAZY LOAD --- */

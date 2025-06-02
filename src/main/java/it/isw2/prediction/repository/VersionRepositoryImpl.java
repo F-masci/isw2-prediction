@@ -11,6 +11,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 /**
  * Implementazione concreta del repository per le versioni.
@@ -40,7 +41,7 @@ public class VersionRepositoryImpl implements VersionRepository {
     @Override
     public List<Version> retrieveVersions() {
         try {
-            return versionDao.retrieveVersions();
+            return versionDao.retrieveVersions().stream().sorted(Comparator.comparing(Version::getReleaseDate)).toList();
         } catch (VersionRetrievalException e) {
             LOGGER.log(Level.SEVERE, "Errore nel recupero delle versioni", e);
             return new ArrayList<>();
@@ -109,6 +110,7 @@ public class VersionRepositoryImpl implements VersionRepository {
                     .filter(version -> version.getReleaseDate() != null &&
                             !version.getReleaseDate().before(startDate) &&
                             !version.getReleaseDate().after(endDate))
+                    .sorted(Comparator.comparing(Version::getReleaseDate))
                     .toList();
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, e, () -> "Errore nel recupero della versione tra le date: " + startDate + " e " + endDate);
