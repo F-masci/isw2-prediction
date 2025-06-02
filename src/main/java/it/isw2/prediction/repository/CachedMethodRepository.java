@@ -2,7 +2,6 @@ package it.isw2.prediction.repository;
 
 import it.isw2.prediction.exception.method.MethodRetrievalException;
 import it.isw2.prediction.exception.method.MethodSaveException;
-import it.isw2.prediction.model.Commit;
 import it.isw2.prediction.model.Method;
 
 import java.util.ArrayList;
@@ -51,7 +50,7 @@ public class CachedMethodRepository implements MethodRepository {
             for (Method method : methods) {
                 try {
                     methodCache.put(method.getFullName(), method);
-                } catch (NullPointerException e) {
+                } catch (NullPointerException _) {
                     LOGGER.warning("Errore durante il caricamento del metodo");
                 }
             }

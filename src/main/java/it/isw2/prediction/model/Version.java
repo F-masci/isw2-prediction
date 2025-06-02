@@ -11,9 +11,9 @@ import java.util.*;
 
 public class Version {
 
-    private int id;
-    private String name;
-    private Date releaseDate;
+    private final int id;
+    private final String name;
+    private final Date releaseDate;
 
     private EnumMap<VersionRole, List<Ticket>> linkedTickets = null;
 

@@ -6,6 +6,7 @@ import org.eclipse.jgit.lib.ObjectReader;
 import org.eclipse.jgit.lib.Repository;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 public class Utils {
 
@@ -15,7 +16,7 @@ public class Utils {
         if (blobId == null || blobId.equals(ObjectId.zeroId())) return "";
         try (ObjectReader reader = repo.newObjectReader()) {
             ObjectLoader loader = reader.open(blobId);
-            return new String(loader.getBytes(), "UTF-8");
+            return new String(loader.getBytes(), StandardCharsets.UTF_8);
         }
     }
 

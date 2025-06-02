@@ -24,9 +24,9 @@ import java.util.logging.Logger;
 
 public class TicketDaoRest extends DaoRest implements TicketDao {
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
-    private static final Logger logger = Logger.getLogger(TicketDaoRest.class.getName());
-    private final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final Logger LOGGER = Logger.getLogger(TicketDaoRest.class.getName());
+    private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
 
 
     @Override
@@ -45,7 +45,7 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
                 ApplicationConfig config = new ApplicationConfig();
                 Project project = config.getSelectedProject();
 
-                logger.log(Level.FINE, () -> "Retrieving tickets of " + project.getKey());
+                LOGGER.log(Level.FINE, () -> "Retrieving tickets of " + project.getKey());
 
                 // Costruzione della query JQL
                 String jql = "project=" + project.getId() + " AND issueType = 'Bug' AND (status = 'closed' OR status = 'resolved') AND resolution = 'fixed'";
@@ -58,13 +58,13 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
                 // Aggiunta dei parametri di paginazione
                 if(maxResults > 0) endpoint += "&maxResults=" + maxResults;
 
-                logger.log(Level.FINE, "Endpoint: {0}", endpoint);
+                LOGGER.log(Level.FINE, "Endpoint: {0}", endpoint);
 
                 // Esecuzione della richiesta GET
                 HttpResponse<String> response = executeGetRequest(endpoint);
 
                 // Parsing della risposta JSON
-                JsonNode rootNode = objectMapper.readTree(response.body());
+                JsonNode rootNode = OBJECT_MAPPER.readTree(response.body());
                 JsonNode issues = rootNode.get("issues");
 
                 // Controllo se issues è un array e parsing dei ticket
@@ -97,9 +97,6 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
      */
     private Ticket parseTicket(JsonNode issueNode) {
 
-        // Formato della data
-        final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
-
         // Campi del ticket
         final String idField = "id";
         final String keyField = "key";
@@ -109,7 +106,7 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
         final String updatedField = "updated";
 
         final String affectedVersionField = "versions";
-        final String fixedVersionField = "fixVersions";
+        // final String fixedVersionField = "fixVersions";
 
         // Parsing dei campi
         String id = issueNode.get(idField).asText();
@@ -121,15 +118,15 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
         Date resolutionDate = null;
         try {
 
-            dateFormatter.setLenient(true);
+            dateFormat.setLenient(true);
 
-            creationDate = dateFormatter.parse(fields.get(createdDateField).asText());
-            updateDate = dateFormatter.parse(fields.get(updatedField).asText());
+            creationDate = dateFormat.parse(fields.get(createdDateField).asText());
+            updateDate = dateFormat.parse(fields.get(updatedField).asText());
             resolutionDate = fields.has(resolutionDateField) && !fields.get(resolutionDateField).isNull()
-                    ? dateFormatter.parse(fields.get(resolutionDateField).asText())
+                    ? dateFormat.parse(fields.get(resolutionDateField).asText())
                     : null;
         } catch (ParseException e) {
-            logger.log(Level.SEVERE, "Errore durante il parsing delle date", e);
+            LOGGER.log(Level.SEVERE, "Errore durante il parsing delle date", e);
         }
 
         // Creazione del ticket

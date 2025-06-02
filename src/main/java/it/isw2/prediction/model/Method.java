@@ -1,13 +1,16 @@
 package it.isw2.prediction.model;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import com.github.javaparser.ast.body.MethodDeclaration;
+import it.isw2.prediction.config.ApplicationConfig;
+import it.isw2.prediction.controller.DatasetCreationController;
 import it.isw2.prediction.exception.ticket.TicketRetrievalException;
+import it.isw2.prediction.factory.VersionRepositoryFactory;
+import it.isw2.prediction.repository.VersionRepository;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
 import org.eclipse.jgit.diff.Edit;
@@ -17,6 +20,8 @@ import org.eclipse.jgit.patch.FileHeader;
 import org.eclipse.jgit.util.io.DisabledOutputStream;
 
 public class Method {
+
+    private static final Logger LOGGER = Logger.getLogger(Method.class.getName());
 
     private final String methodName;
     private final String className;
@@ -35,6 +40,11 @@ public class Method {
     private Map<Version, Boolean> buggyPerVersion = new HashMap<>();
 
     private Map<Commit, MethodInfo> methodInfoPerCommit = new HashMap<>();
+
+    // Nuove mappe per branch/decision points, nesting depth e numero di parametri
+    private Map<Commit, Integer> branchPointsPerCommit = new HashMap<>();
+    private Map<Commit, Integer> nestingDepthPerCommit = new HashMap<>();
+    private Map<Commit, Integer> parametersCountPerCommit = new HashMap<>();
 
     public Method(String className, String packageName, String methodName) {
         this.className = className;
@@ -68,15 +78,98 @@ public class Method {
         return versions;
     }
 
+    /**
+     * Aggiunge una versione al metodo.
+     * Se la versione è già presente, non fa nulla.
+     * Se non ci sono versioni precedenti, aggiunge solo la nuova versione.
+     * Se la nuova versione è precedente all'ultima, aggiunge solo la nuova versione.
+     * Altrimenti, aggiunge tutte le versioni intermedie fino alla nuova versione.
+     *
+     * @param version La versione da aggiungere
+     */
+    public void addVersion(Version version) {
+
+        // Se la versione è già presente, non fare nulla
+        if (this.versions.contains(version)) return;
+
+        ApplicationConfig applicationConfig = new ApplicationConfig();
+
+        // Se non ci sono versioni o se la funzionalità di tutte le versioni è disabilitata, aggiungi solamente la versione
+        if (this.versions.isEmpty() || !applicationConfig.isMethodAllVersionEnabled()) {
+            this.versions.add(version);
+            return;
+        }
+
+        Version lastVersion = findLastVersion();
+
+        if (version.getReleaseDate().before(lastVersion.getReleaseDate())) {
+            this.versions.add(version);
+        } else {
+            addIntermediateVersions(lastVersion, version);
+        }
+    }
+
+    /**
+     * Trova l'ultima versione (più recente) tra quelle attualmente presenti.
+     *
+     * @return l'ultima versione per data di rilascio
+     */
+    private Version findLastVersion() {
+        Version lastVersion = null;
+        for (Version v : this.versions) {
+            if (lastVersion == null || v.getReleaseDate().after(lastVersion.getReleaseDate())) {
+                lastVersion = v;
+            }
+        }
+        return lastVersion;
+    }
+
+    /**
+     * Aggiunge tutte le versioni intermedie tra lastVersion e targetVersion.
+     *
+     * @param lastVersion la versione di partenza (già presente)
+     * @param targetVersion la versione di destinazione da aggiungere
+     */
+    private void addIntermediateVersions(Version lastVersion, Version targetVersion) {
+        // Ottieni repository delle versioni
+        VersionRepository versionRepository = VersionRepositoryFactory.getInstance().getVersionRepository();
+        List<Version> allVersions = versionRepository.retrieveVersions();
+
+        // Ordina tutte le versioni per data
+        allVersions.sort(Comparator.comparing(Version::getReleaseDate));
+
+        // Prepara le variabili per l'elaborazione
+        boolean startAdding = false;
+        boolean targetReached = false;
+
+        // Aggiungi tutte le versioni intermedie
+        for (Version v : allVersions) {
+            if (!startAdding && v.equals(lastVersion)) {
+                startAdding = true;
+            } else if (startAdding && !targetReached) {
+                boolean isVersionToAdd = v.getReleaseDate().before(targetVersion.getReleaseDate()) || v.equals(targetVersion);
+
+                if (isVersionToAdd && !this.versions.contains(v)) {
+                    this.versions.add(v);
+                }
+
+                targetReached = v.equals(targetVersion);
+            }
+        }
+    }
+
     /* --- PARSING --- */
 
     public void parseMethodDeclaration(Commit commit, MethodDeclaration methodDeclaration) throws TicketRetrievalException {
-        this.versions.add(commit.getVersion());
+        this.addVersion(commit.getVersion());
         this.methodInfoPerCommit.put(commit, computeMethodInfo(methodDeclaration));
         this.locPerCommit.put(commit, computeLOC(methodDeclaration));
         this.cyclomaticComplexityPerCommit.put(commit, computeCyclomaticComplexity(methodDeclaration));
         this.cognitiveComplexityPerCommit.put(commit, computeCognitiveComplexity(methodDeclaration));
         this.methodHistoriesPerVersion.put(commit.getVersion(), this.methodHistoriesPerVersion.getOrDefault(commit.getVersion(), 0) + 1);
+        this.branchPointsPerCommit.put(commit, computeBranchPoints(methodDeclaration));
+        this.nestingDepthPerCommit.put(commit, computeNestingDepth(methodDeclaration));
+        this.parametersCountPerCommit.put(commit, computeParametersCount(methodDeclaration));
         this.computeIfBuggy(commit);
     }
 
@@ -160,6 +253,30 @@ public class Method {
         this.methodInfoPerCommit = methodInfoPerCommit;
     }
 
+    public Map<Commit, Integer> getBranchPointsPerCommit() {
+        return branchPointsPerCommit;
+    }
+
+    public void setBranchPointsPerCommit(Map<Commit, Integer> branchPointsPerCommit) {
+        this.branchPointsPerCommit = branchPointsPerCommit;
+    }
+
+    public Map<Commit, Integer> getNestingDepthPerCommit() {
+        return nestingDepthPerCommit;
+    }
+
+    public void setNestingDepthPerCommit(Map<Commit, Integer> nestingDepthPerCommit) {
+        this.nestingDepthPerCommit = nestingDepthPerCommit;
+    }
+
+    public Map<Commit, Integer> getParametersCountPerCommit() {
+        return parametersCountPerCommit;
+    }
+
+    public void setParametersCountPerCommit(Map<Commit, Integer> parametersCountPerCommit) {
+        this.parametersCountPerCommit = parametersCountPerCommit;
+    }
+
     /* --- FEATURES --- */
 
     public int getLOC(Version version) {
@@ -191,6 +308,18 @@ public class Method {
         return getSumForVersion(deletedLinesPerCommit, version);
     }
 
+    public int getBranchPoints(Version version) {
+        return getMetricForVersion(branchPointsPerCommit, version);
+    }
+
+    public int getNestingDepth(Version version) {
+        return getMetricForVersion(nestingDepthPerCommit, version);
+    }
+
+    public int getParametersCount(Version version) {
+        return getMetricForVersion(parametersCountPerCommit, version);
+    }
+
     private int getSumForVersion(Map<Commit, Integer> metricMap, Version version) {
         int sum = 0;
         for (Map.Entry<Commit, Integer> entry : metricMap.entrySet()) {
@@ -209,12 +338,10 @@ public class Method {
     private int getMetricForVersion(Map<Commit, Integer> metricMap, Version version) {
         Commit lastCommit = null;
         for (Commit commit : metricMap.keySet()) {
-            if (commit.getVersion().equals(version)) {
-                if (lastCommit == null || commit.getDate().after(lastCommit.getDate())) {
+            if (commit.getVersion().equals(version) && (lastCommit == null || commit.getDate().after(lastCommit.getDate()))) {
                     lastCommit = commit;
                 }
             }
-        }
         if (lastCommit != null) {
             return metricMap.get(lastCommit);
         }
@@ -232,16 +359,22 @@ public class Method {
         return methodDeclaration.getEnd().get().line - methodDeclaration.getBegin().get().line;
     }
 
+    /**
+     * Calcola la complessità ciclomatica per il metodo.
+     * Conta le strutture di controllo come if, for, while, switch e operatori logici.
+     */
     private int computeCyclomaticComplexity(MethodDeclaration methodDeclaration) {
-        // Conta i nodi di decisione: if, for, while, case, catch, &&, ||
         int complexity = 1;
         String body = methodDeclaration.toString();
         complexity += countRegex(body, "\\bif\\b|\\bfor\\b|\\bwhile\\b|\\bcase\\b|\\bcatch\\b|&&|\\|\\|");
         return complexity;
     }
 
+    /**
+     * Calcola la complessità cognitiva per il metodo.
+     * Conta i livelli di annidamento di strutture di controllo come if, for, while, switch e case.
+     */
     private int computeCognitiveComplexity(MethodDeclaration methodDeclaration) {
-        // Semplice: conta i livelli di annidamento di if, for, while, switch
         int complexity = 0;
         int nesting = 0;
         String[] lines = methodDeclaration.toString().split("\\r?\\n");
@@ -251,13 +384,54 @@ public class Method {
                 complexity += 1 + nesting;
                 nesting++;
             }
-            if (trimmed.equals("}")) {
-                if (nesting > 0) nesting--;
-            }
+            if (trimmed.equals("}") && nesting > 0) nesting--;
         }
         return complexity;
     }
 
+    /**
+     * Calcola i punti di ramificazione (branch points) per il metodo.
+     * Conta le strutture di controllo come if, for, while, switch e operatori logici.
+     */
+    private int computeBranchPoints(MethodDeclaration methodDeclaration) {
+        String body = methodDeclaration.toString();
+        return countRegex(body, "\\bif\\b|\\bfor\\b|\\bwhile\\b|\\bcase\\b|\\bcatch\\b|\\bswitch\\b|&&|\\|\\|");
+    }
+
+    /**
+     * Calcola la profondità di annidamento per il metodo.
+     * Conta il numero massimo di strutture di controllo annidate.
+     */
+    private int computeNestingDepth(MethodDeclaration methodDeclaration) {
+        int maxNesting = 0;
+        int currentNesting = 0;
+        String[] lines = methodDeclaration.toString().split("\\r?\\n");
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.matches("(if|for|while|switch).*\\(.*\\).*") || trimmed.startsWith("case ")) {
+                currentNesting++;
+                if (currentNesting > maxNesting) maxNesting = currentNesting;
+            }
+            if (trimmed.equals("}") && currentNesting > 0) currentNesting--;
+        }
+        return maxNesting;
+    }
+
+    /**
+     * Calcola il numero di parametri del metodo.
+     * Conta i parametri definiti nella dichiarazione del metodo.
+     */
+    private int computeParametersCount(MethodDeclaration methodDeclaration) {
+        return methodDeclaration.getParameters().size();
+    }
+
+    /**
+     * Conta le occorrenze di un'espressione regolare in un testo.
+     *
+     * @param text  Il testo in cui cercare
+     * @param regex L'espressione regolare da cercare
+     * @return Il numero di occorrenze trovate
+     */
     private int countRegex(String text, String regex) {
         java.util.regex.Pattern p = java.util.regex.Pattern.compile(regex);
         java.util.regex.Matcher m = p.matcher(text);
@@ -319,10 +493,7 @@ public class Method {
             churnPerCommit.put(commit, addedLines + deletedLines);
 
         } catch (IOException e) {
-            // Log dell'errore
-            java.util.logging.Logger.getLogger(Method.class.getName()).log(
-                    java.util.logging.Level.SEVERE,
-                    "Errore nel calcolo del churn per il metodo " + getFullName(), e);
+            LOGGER.log(Level.SEVERE, e, () -> "Errore nel calcolo del churn per il metodo " + getFullName());
         }
     }
 
@@ -333,7 +504,13 @@ public class Method {
         return start1 <= end2 && end1 >= start2;
     }
 
-
+    /**
+     * Controlla se il commit è associato a ticket che hanno versioni affette.
+     * Se sì, segna la versione come "buggy".
+     *
+     * @param commit Commit da analizzare
+     * @throws TicketRetrievalException Se si verifica un errore durante il recupero dei ticket
+     */
     private void computeIfBuggy(Commit commit) throws TicketRetrievalException {
         List<Ticket> tickets = commit.getLinkedTickets();
         for (Ticket ticket : tickets) {
@@ -343,6 +520,10 @@ public class Method {
         }
     }
 
+    /**
+     * Classe interna per rappresentare le informazioni su un metodo.
+     * Contiene le linee di inizio e fine del metodo.
+     */
     public record MethodInfo(int beginLine, int endLine) {
         public Integer getBeginLine() {
             return beginLine;

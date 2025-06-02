@@ -2,21 +2,16 @@ package it.isw2.prediction.controller;
 
 import it.isw2.prediction.Project;
 import it.isw2.prediction.config.ApplicationConfig;
-import it.isw2.prediction.factory.CommitRepositoryFactory;
 import it.isw2.prediction.factory.MethodRepositoryFactory;
-import it.isw2.prediction.factory.TicketRepositoryFactory;
 import it.isw2.prediction.model.Method;
 import it.isw2.prediction.model.Version;
-import it.isw2.prediction.repository.CommitRepository;
 import it.isw2.prediction.repository.MethodRepository;
-import it.isw2.prediction.repository.TicketRepository;
 
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.Comparator;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -24,10 +19,10 @@ import java.util.logging.Logger;
 public class DatasetCreationController {
 
     private static final Logger LOGGER = Logger.getLogger(DatasetCreationController.class.getName());
-    private final String SEPARATOR = ";";
+    private static final String SEPARATOR = ";";
 
-    private final String csvHeader = "Progetto;Package;Classe;Metodo;Versione;LOC;Cyclomatic;Cognitive;MethodHistories;AddedLines;DeletedLines;Churn;Buggy\n";
-    private final HashMap<String, String> csvRecords = new HashMap<>();
+    private static final String CSV_HEADER = "Project;Package;Class;Method;Version;LOC;Cyclomatic;Cognitive;MethodHistories;AddedLines;DeletedLines;Churn;BranchPoints;NestingDepth;ParametersCount;Buggy";
+    private final List<String> csvRecords = new ArrayList<>();
 
     public void createDataset() {
         try {
@@ -37,25 +32,25 @@ public class DatasetCreationController {
             for(Method method : methods) {
                 List<Version> versions = method.getVersions();
                 for (Version version : versions) {
-                    StringBuilder record = new StringBuilder();
-                    record.append(getProjectName()).append(SEPARATOR)
-                            .append(method.getPackageName()).append(SEPARATOR)
-                            .append(method.getClassName()).append(SEPARATOR)
-                            .append(method.getMethodName()).append(SEPARATOR)
-                            .append(version.getName()).append(SEPARATOR)
-                            .append(method.getLOC(version)).append(SEPARATOR)
-                            .append(method.getCyclomaticComplexity(version)).append(SEPARATOR)
-                            .append(method.getCognitiveComplexity(version)).append(SEPARATOR)
-                            .append(method.getMethodHistories(version)).append(SEPARATOR)
-                            .append(method.getAddedLines(version)).append(SEPARATOR)
-                            .append(method.getDeletedLines(version)).append(SEPARATOR)
-                            .append(method.getChurn(version)).append(SEPARATOR)
-                            .append(method.isBuggy(version));
+                    String csvRecord = getProjectName() + SEPARATOR +
+                            method.getPackageName() + SEPARATOR +
+                            method.getClassName() + SEPARATOR +
+                            method.getMethodName() + SEPARATOR +
+                            version.getName() + SEPARATOR +
+                            method.getLOC(version) + SEPARATOR +
+                            method.getCyclomaticComplexity(version) + SEPARATOR +
+                            method.getCognitiveComplexity(version) + SEPARATOR +
+                            method.getMethodHistories(version) + SEPARATOR +
+                            method.getAddedLines(version) + SEPARATOR +
+                            method.getDeletedLines(version) + SEPARATOR +
+                            method.getChurn(version) + SEPARATOR +
+                            method.getBranchPoints(version) + SEPARATOR +
+                            method.getNestingDepth(version) + SEPARATOR +
+                            method.getParametersCount(version) + SEPARATOR +
+                            method.isBuggy(version);
 
-                    // Creare la chiave per il record CSV
-                    String recordKey = computeCsvRecordKey(method, version);
-                    // Aggiungere il record alla mappa
-                    csvRecords.put(recordKey, record.toString() + "\n");
+                    // Aggiungere il record alla lista
+                    csvRecords.add(csvRecord);
                 }
             }
 
@@ -74,7 +69,7 @@ public class DatasetCreationController {
 
         // Creare la directory dataset/{projectName} se non esiste
         ApplicationConfig config = new ApplicationConfig();
-        String csvFilePath = config.getDatasetPath() + "/" + projectName + ".csv";
+        String csvFilePath = Paths.get(config.getDatasetPath(), projectName + ".csv").toString();
         try {
             Files.createDirectories(Paths.get(config.getDatasetPath()));
         } catch (IOException _) {
@@ -84,20 +79,14 @@ public class DatasetCreationController {
 
         try (FileWriter csvWriter = new FileWriter(csvFilePath)) {
             // Intestazione CSV
-            csvWriter.append(csvHeader);
+            csvWriter.append(CSV_HEADER + "\n");
             // Scrivere i dati per ogni metodo
-            for (String record : csvRecords.values()) csvWriter.append(record);
+            for (String csvRecord : csvRecords) csvWriter.append(csvRecord + "\n");
 
-            LOGGER.log(Level.INFO, "File CSV creato con successo: " + csvFilePath);
+            LOGGER.log(Level.INFO, "File CSV creato con successo: {0}", csvFilePath);
         } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Errore durante la creazione del file CSV: " + csvFilePath, e);
+            LOGGER.log(Level.SEVERE, e, () -> "Errore durante la creazione del file CSV: " + csvFilePath);
         }
-    }
-
-    private String computeCsvRecordKey(Method method, Version version) {
-        final String separator = ";";
-        return method.getFullName() + separator
-                + version.getName();
     }
 
     private String getProjectName() {

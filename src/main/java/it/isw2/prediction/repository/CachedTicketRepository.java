@@ -77,7 +77,7 @@ public class CachedTicketRepository implements TicketRepository {
             for (Ticket ticket : tickets) {
                 try {
                     ticketCache.put(ticket.getId(), ticket);
-                } catch (NullPointerException e) {
+                } catch (NullPointerException _) {
                     LOGGER.warning("Errore durante il caricamento del ticket");
                 }
             }

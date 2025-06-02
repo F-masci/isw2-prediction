@@ -1,9 +1,7 @@
 package it.isw2.prediction.model;
 
 import it.isw2.prediction.exception.ticket.TicketRetrievalException;
-import it.isw2.prediction.factory.MethodRepositoryFactory;
 import it.isw2.prediction.factory.TicketRepositoryFactory;
-import it.isw2.prediction.repository.MethodRepository;
 import it.isw2.prediction.repository.TicketRepository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevTree;

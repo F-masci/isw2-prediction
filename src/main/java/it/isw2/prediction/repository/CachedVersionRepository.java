@@ -104,7 +104,7 @@ public class CachedVersionRepository implements VersionRepository {
             for (Version version : versions) {
                 try {
                     versionCache.put(version.getId(), version);
-                } catch (NullPointerException e) {
+                } catch (NullPointerException _) {
                     LOGGER.warning("Errore durante il caricamento della versione");
                 }
             }

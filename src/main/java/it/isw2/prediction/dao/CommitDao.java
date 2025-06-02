@@ -10,6 +10,6 @@ public interface CommitDao {
      * Ritorna tutti i commit
      * @return Commit associati
      */
-    public List<Commit> retrieveCommits();
+    List<Commit> retrieveCommits();
 
 }

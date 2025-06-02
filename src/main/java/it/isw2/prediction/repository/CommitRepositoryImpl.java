@@ -40,7 +40,7 @@ public class CommitRepositoryImpl implements CommitRepository {
 
     @Override
     public Commit retrieveCommitById(String commitId) {
-        LOGGER.info("Ricerca del commit con ID: " + commitId);
+        LOGGER.info(() -> "Ricerca del commit con ID: " + commitId);
         return commitDao.retrieveCommits().stream()
                 .filter(commit -> commit.getId().equals(commitId))
                 .findFirst()

@@ -8,15 +8,15 @@ import java.util.Properties;
 
 public class ApplicationConfig {
 
-    private final String FILENAME = "application.properties";
+    private static final String FILENAME = "application.properties";
 
-    private Properties properties = new Properties();
+    private final Properties properties = new Properties();
 
     public ApplicationConfig() {
         try (InputStream input = getClass().getClassLoader().getResourceAsStream(FILENAME)) {
             if (input == null) throw new ConfigException("File di configurazione non trovato: " + FILENAME);
             properties.load(input);
-        } catch (Exception e) {
+        } catch (Exception _) {
             System.exit(1);
         }
     }
@@ -34,7 +34,10 @@ public class ApplicationConfig {
     }
 
     public boolean isMethodCacheEnabled() {
-        return Boolean.parseBoolean(this.get("cache.method"));
+        return Boolean.parseBoolean(this.get("method.cache"));
+    }
+    public boolean isMethodAllVersionEnabled() {
+        return Boolean.parseBoolean(this.get("method.allVersion"));
     }
 
 }

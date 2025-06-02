@@ -1,7 +1,6 @@
 package it.isw2.prediction.dao;
 
 import it.isw2.prediction.exception.method.MethodRetrievalException;
-import it.isw2.prediction.model.Commit;
 import it.isw2.prediction.model.Method;
 
 import java.util.List;
@@ -13,6 +12,6 @@ public interface MethodDao {
      *
      * @return Lista di tutti i metodi trovati
      */
-    public List<Method> retrieveMethods() throws MethodRetrievalException;
+    List<Method> retrieveMethods() throws MethodRetrievalException;
 
 }

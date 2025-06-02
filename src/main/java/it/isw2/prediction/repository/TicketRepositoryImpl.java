@@ -41,7 +41,7 @@ public class TicketRepositoryImpl implements TicketRepository {
 
     @Override
     public Ticket retrieveTicketById(int ticketId) throws TicketRetrievalException {
-        LOGGER.info("Ricerca del ticket con ID: " + ticketId);
+        LOGGER.info(()-> "Ricerca del ticket con ID: " + ticketId);
         return ticketDao.retrieveTickets().stream()
                 .filter(ticket -> ticket.getId() == ticketId)
                 .findFirst()
@@ -50,7 +50,7 @@ public class TicketRepositoryImpl implements TicketRepository {
 
     @Override
     public Ticket retrieveTicketByKey(String key) throws TicketRetrievalException {
-        LOGGER.info("Ricerca del ticket con chiave: " + key);
+        LOGGER.info(()-> "Ricerca del ticket con chiave: " + key);
         return ticketDao.retrieveTickets().stream()
                 .filter(ticket -> ticket.getKey().equals(key))
                 .findFirst()

@@ -55,7 +55,7 @@ public class VersionRepositoryImpl implements VersionRepository {
                     .findFirst()
                     .orElse(null);
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Errore nel recupero della versione con ID: " + versionId, e);
+            LOGGER.log(Level.SEVERE, e, ()-> "Errore nel recupero della versione con ID: " + versionId);
             return null;
         }
     }
@@ -68,7 +68,7 @@ public class VersionRepositoryImpl implements VersionRepository {
                     .findFirst()
                     .orElse(null);
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Errore nel recupero della versione con nome: " + versionName, e);
+            LOGGER.log(Level.SEVERE, e, () -> "Errore nel recupero della versione con nome: " + versionName);
             return null;
         }
     }
@@ -81,7 +81,7 @@ public class VersionRepositoryImpl implements VersionRepository {
                     .min(Comparator.comparing(Version::getReleaseDate))
                     .orElse(null);
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Errore nel recupero della versione successiva alla data: " + date, e);
+            LOGGER.log(Level.SEVERE, e, () -> "Errore nel recupero della versione successiva alla data: " + date);
             return null;
         }
     }
@@ -94,7 +94,7 @@ public class VersionRepositoryImpl implements VersionRepository {
                     .max(Comparator.comparing(Version::getReleaseDate))
                     .orElse(null);
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Errore nel recupero della versione precedente alla data: " + date, e);
+            LOGGER.log(Level.SEVERE, e, () -> "Errore nel recupero della versione precedente alla data: " + date);
             return null;
         }
     }

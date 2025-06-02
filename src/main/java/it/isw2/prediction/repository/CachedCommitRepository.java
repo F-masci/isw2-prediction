@@ -64,7 +64,7 @@ public class CachedCommitRepository implements CommitRepository {
             for (Commit commit : commits) {
                 try {
                     commitCache.put(commit.getId(), commit);
-                } catch (NullPointerException e) {
+                } catch (NullPointerException _) {
                     LOGGER.warning("Errore durante il caricamento del commit");
                 }
             }

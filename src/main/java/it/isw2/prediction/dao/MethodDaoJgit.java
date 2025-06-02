@@ -7,50 +7,28 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import it.isw2.prediction.config.ApplicationConfig;
 import it.isw2.prediction.config.GitApiConfig;
 import it.isw2.prediction.factory.CommitRepositoryFactory;
-import it.isw2.prediction.factory.MethodRepositoryFactory;
-import it.isw2.prediction.factory.VersionRepositoryFactory;
 import it.isw2.prediction.model.Commit;
 import it.isw2.prediction.model.Method;
-import it.isw2.prediction.model.Version;
 import it.isw2.prediction.repository.CommitRepository;
-import it.isw2.prediction.repository.MethodRepository;
-import it.isw2.prediction.repository.VersionRepository;
 import it.isw2.prediction.utils.Utils;
 import org.eclipse.jgit.api.Git;
-import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
-import org.eclipse.jgit.diff.DiffFormatter;
-import org.eclipse.jgit.diff.EditList;
-import org.eclipse.jgit.lib.ObjectId;
-import org.eclipse.jgit.lib.ObjectLoader;
 import org.eclipse.jgit.lib.ObjectReader;
 import org.eclipse.jgit.lib.Repository;
-import org.eclipse.jgit.patch.FileHeader;
 import org.eclipse.jgit.revwalk.RevCommit;
-import org.eclipse.jgit.revwalk.RevTree;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
-import org.eclipse.jgit.treewalk.TreeWalk;
-import org.eclipse.jgit.treewalk.filter.PathSuffixFilter;
-import org.eclipse.jgit.util.io.DisabledOutputStream;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.AbstractMap;
 
 public class MethodDaoJgit implements MethodDao {
 
     private static final Logger LOGGER = Logger.getLogger(MethodDaoJgit.class.getName());
-    private static final Pattern METHOD_PATTERN = Pattern.compile(
-            "(?:public|protected|private|static|\\s)\\s+[\\w\\<\\>\\[\\]]+\\s+(\\w+)\\s*\\([^\\)]*\\)\\s*\\{");
-    private static final Pattern PACKAGE_PATTERN = Pattern.compile("package\\s+([\\w\\.]+)\\s*;");
-    private static final Pattern CLASS_PATTERN = Pattern.compile("(?:public|private|protected|\\s)\\s+(?:class|interface|enum)\\s+(\\w+)");
 
     @Override
     public List<Method> retrieveMethods() {
@@ -65,7 +43,7 @@ public class MethodDaoJgit implements MethodDao {
             // FIXME: per ora prendo solo un piccolo campione di commit
             commits = commits.stream()
                     .sorted(Comparator.comparing(Commit::getDate))
-                    // .limit(50)
+                    // .limit(100)
                     .toList();
 
             // Apro il repository Git
@@ -109,16 +87,16 @@ public class MethodDaoJgit implements MethodDao {
                     .call();
 
             for (DiffEntry diff : diffs) {
-                if (!diff.getNewPath().endsWith(".java")) continue;
-                if (diff.getNewPath().contains("/test/")) continue;
-                if (diff.getChangeType() == DiffEntry.ChangeType.DELETE) continue;
+                boolean isDeleted = diff.getChangeType() == DiffEntry.ChangeType.DELETE;
+                if (!diff.getNewPath().endsWith(".java") && !isDeleted) continue;
+                if ((diff.getNewPath().contains("/test/") || (isDeleted && diff.getOldPath().contains("/test/")))) continue;
 
                 String oldCode = "";
                 if (diff.getChangeType() != DiffEntry.ChangeType.ADD) {
                     oldCode = Utils.readBlobAsString(repository, diff.getOldId().toObjectId());
                 }
-                String newCode = Utils.readBlobAsString(repository, diff.getNewId().toObjectId());
-                if (newCode.isEmpty()) continue;
+                String newCode = isDeleted ? "" : Utils.readBlobAsString(repository, diff.getNewId().toObjectId());
+                if (!isDeleted && newCode.isEmpty()) continue;
 
                 JavaParser parser = new JavaParser();
                 CompilationUnit oldCu = null;
@@ -131,27 +109,48 @@ public class MethodDaoJgit implements MethodDao {
                         continue;
                     }
                 }
-                CompilationUnit newCu;
-                try {
-                    newCu = parser.parse(newCode).getResult().orElse(null);
-                    if (newCu == null) {
-                        LOGGER.log(Level.WARNING, "Parsing fallito per il file {0}", diff.getNewPath());
+                CompilationUnit newCu = null;
+                if (!isDeleted) {
+                    try {
+                        newCu = parser.parse(newCode).getResult().orElse(null);
+                        if (newCu == null) {
+                            LOGGER.log(Level.WARNING, "Parsing fallito per il file {0}", diff.getNewPath());
+                            continue;
+                        }
+                    } catch (Exception e) {
+                        LOGGER.log(Level.WARNING, "Errore nel parsing del file {0}: {1}",
+                                new Object[]{diff.getNewPath(), e.getMessage()});
                         continue;
                     }
-                } catch (Exception e) {
-                    LOGGER.log(Level.WARNING, "Errore nel parsing del file {0}: {1}",
-                            new Object[]{diff.getNewPath(), e.getMessage()});
-                    continue;
                 }
 
                 String packageName = null;
-                if (newCu.getPackageDeclaration().isPresent()) {
+                if (!isDeleted && newCu.getPackageDeclaration().isPresent()) {
                     packageName = newCu.getPackageDeclaration().get().getNameAsString();
+                } else if (isDeleted && oldCu != null && oldCu.getPackageDeclaration().isPresent()) {
+                    packageName = oldCu.getPackageDeclaration().get().getNameAsString();
                 }
                 if (packageName == null) continue;
 
                 List<MethodDeclaration> oldMethods = oldCu != null ? oldCu.findAll(MethodDeclaration.class) : new ArrayList<>();
-                List<MethodDeclaration> newMethods = newCu.findAll(MethodDeclaration.class);
+                List<MethodDeclaration> newMethods = !isDeleted && newCu != null ? newCu.findAll(MethodDeclaration.class) : new ArrayList<>();
+
+                // Processa i metodi cancellati
+                if (isDeleted) {
+                    for (MethodDeclaration oldMethod : oldMethods) {
+                        String methodName = oldMethod.getNameAsString();
+                        String className = oldMethod.findAncestor(ClassOrInterfaceDeclaration.class)
+                                .map(c -> c.getNameAsString())
+                                .orElse("UnknownClass");
+                        String uniqueKey = packageName + "." + className + "#" + methodName;
+                        Method method;
+                        if (!methods.containsKey(uniqueKey))
+                            methods.put(uniqueKey, new Method(className, packageName, methodName));
+                        method = methods.get(uniqueKey);
+                        method.parseMethodDeclaration(commit, oldMethod);
+                        method.parseDiffEntry(repository, commit, diff);
+                    }
+                }
 
                 for (MethodDeclaration newMethod : newMethods) {
                     String methodName = newMethod.getNameAsString();

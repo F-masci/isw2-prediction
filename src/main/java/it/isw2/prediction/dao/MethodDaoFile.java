@@ -36,7 +36,7 @@ public class MethodDaoFile implements MethodDao {
      */
     public void saveMethods(List<Method> methods) throws MethodSaveException {
         for (Method method : methods) {
-            String methodPath = "cache/" + selectedProject + "/methods/" + method.getPackageName() + "/" + method.getClassName() + "/" + method.getMethodName();
+            String methodPath = Paths.get("cache", selectedProject, "methods", method.getPackageName(), method.getClassName(), method.getMethodName()).toString();
 
             try {
                 // Crea la directory del metodo
@@ -130,6 +130,27 @@ public class MethodDaoFile implements MethodDao {
                 }
                 allMaps.put("deletedLinesPerCommit", deletedLinesMap);
 
+                // branchPointsPerCommit
+                Map<String, Integer> branchPointsMap = new HashMap<>();
+                for (Map.Entry<Commit, Integer> entry : method.getBranchPointsPerCommit().entrySet()) {
+                    branchPointsMap.put(entry.getKey().getId(), entry.getValue());
+                }
+                allMaps.put("branchPointsPerCommit", branchPointsMap);
+
+                // nestingDepthPerCommit
+                Map<String, Integer> nestingDepthMap = new HashMap<>();
+                for (Map.Entry<Commit, Integer> entry : method.getNestingDepthPerCommit().entrySet()) {
+                    nestingDepthMap.put(entry.getKey().getId(), entry.getValue());
+                }
+                allMaps.put("nestingDepthPerCommit", nestingDepthMap);
+
+                // parametersCountPerCommit
+                Map<String, Integer> parametersCountMap = new HashMap<>();
+                for (Map.Entry<Commit, Integer> entry : method.getParametersCountPerCommit().entrySet()) {
+                    parametersCountMap.put(entry.getKey().getId(), entry.getValue());
+                }
+                allMaps.put("parametersCountPerCommit", parametersCountMap);
+
                 // Salva tutte le mappe in un unico file JSON
                 Path mapsFile = Paths.get(methodPath, "maps.json");
                 Files.writeString(mapsFile, mapper.writeValueAsString(allMaps),
@@ -142,7 +163,7 @@ public class MethodDaoFile implements MethodDao {
             }
         }
 
-        LOGGER.info("Cache dei metodi creata/aggiornata su filesystem per il progetto: " + selectedProject);
+        LOGGER.info(() -> "Cache dei metodi creata/aggiornata su filesystem per il progetto: " + selectedProject);
     }
 
     /**
@@ -293,6 +314,39 @@ public class MethodDaoFile implements MethodDao {
                                         method.setDeletedLinesPerCommit(deletedLinesPerCommit);
                                     }
 
+                                    // branchPointsPerCommit
+                                    Map<String, Integer> branchPointsMap = (Map<String, Integer>) maps.get("branchPointsPerCommit");
+                                    Map<Commit, Integer> branchPointsPerCommit = new HashMap<>();
+                                    if (branchPointsMap != null) {
+                                        for (Map.Entry<String, Integer> entry : branchPointsMap.entrySet()) {
+                                            Commit commit = commitRepository.retrieveCommitById(entry.getKey());
+                                            if (commit != null) branchPointsPerCommit.put(commit, entry.getValue());
+                                        }
+                                        method.setBranchPointsPerCommit(branchPointsPerCommit);
+                                    }
+
+                                    // nestingDepthPerCommit
+                                    Map<String, Integer> nestingDepthMap = (Map<String, Integer>) maps.get("nestingDepthPerCommit");
+                                    Map<Commit, Integer> nestingDepthPerCommit = new HashMap<>();
+                                    if (nestingDepthMap != null) {
+                                        for (Map.Entry<String, Integer> entry : nestingDepthMap.entrySet()) {
+                                            Commit commit = commitRepository.retrieveCommitById(entry.getKey());
+                                            if (commit != null) nestingDepthPerCommit.put(commit, entry.getValue());
+                                        }
+                                        method.setNestingDepthPerCommit(nestingDepthPerCommit);
+                                    }
+
+                                    // parametersCountPerCommit
+                                    Map<String, Integer> parametersCountMap = (Map<String, Integer>) maps.get("parametersCountPerCommit");
+                                    Map<Commit, Integer> parametersCountPerCommit = new HashMap<>();
+                                    if (parametersCountMap != null) {
+                                        for (Map.Entry<String, Integer> entry : parametersCountMap.entrySet()) {
+                                            Commit commit = commitRepository.retrieveCommitById(entry.getKey());
+                                            if (commit != null) parametersCountPerCommit.put(commit, entry.getValue());
+                                        }
+                                        method.setParametersCountPerCommit(parametersCountPerCommit);
+                                    }
+
                                     methods.add(method);
                                 } catch (IOException e) {
                                     throw new MethodRetrievalException("Errore durante il recupero del metodo: " + methodDir.getFileName(), e);
@@ -305,7 +359,7 @@ public class MethodDaoFile implements MethodDao {
         } catch (IOException e) {
             throw new MethodRetrievalException("Errore durante la lettura della directory dei metodi", e);
         }
-        LOGGER.info("Cache dei metodi letta da filesystem per il progetto: " + selectedProject);
+        LOGGER.info(() -> "Cache dei metodi letta da filesystem per il progetto: " + selectedProject);
         return methods;
     }
 

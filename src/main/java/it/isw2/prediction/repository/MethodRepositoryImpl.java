@@ -6,7 +6,6 @@ import it.isw2.prediction.dao.MethodDaoFile;
 import it.isw2.prediction.exception.method.MethodRetrievalException;
 import it.isw2.prediction.exception.method.MethodSaveException;
 import it.isw2.prediction.factory.MethodDaoFactory;
-import it.isw2.prediction.model.Commit;
 import it.isw2.prediction.model.Method;
 
 import java.util.List;
