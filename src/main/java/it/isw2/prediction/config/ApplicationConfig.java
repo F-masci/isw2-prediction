@@ -91,5 +91,8 @@ public class ApplicationConfig {
     public String getInferenceClassifier() {
         return this.get("prediction.inference.classifier");
     }
+    public String getInferenceActionableFeature() {
+        return this.get("prediction.inference.actionable.feature");
+    }
 
 }
