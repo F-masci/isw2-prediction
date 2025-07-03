@@ -4,7 +4,6 @@ import it.isw2.prediction.FeatureSelection;
 import it.isw2.prediction.config.ApplicationConfig;
 import weka.attributeSelection.*;
 import weka.classifiers.Classifier;
-import weka.classifiers.trees.J48;
 import weka.classifiers.trees.RandomForest;
 import weka.classifiers.bayes.NaiveBayes;
 import weka.classifiers.lazy.IBk;
@@ -14,7 +13,6 @@ import weka.core.Instances;
 import weka.core.converters.CSVLoader;
 import weka.filters.Filter;
 import weka.filters.unsupervised.attribute.StringToNominal;
-import weka.core.SelectedTag;
 import weka.core.SelectedTag;
 
 import java.io.File;
@@ -49,7 +47,7 @@ public class PredictionController extends CsvController {
                 featureSelections.add(FeatureSelection.NONE);
             }
 
-            String header = String.join(SEPARATOR, "Model", "Feature Selection", "Features Number", "Precision", "Recall", "AUC", "Kappa", "NPofB20");
+            String header = String.join(SEPARATOR, "Model", "Feature Selection", "Features Number", "Precision", "Recall", "AUC", "Kappa");
             List<String> lines = new ArrayList<>();
 
             for (FeatureSelection featureSelection : featureSelections) {
@@ -104,14 +102,14 @@ public class PredictionController extends CsvController {
                     Evaluation eval = new Evaluation(trainData);
                     model.buildClassifier(trainData);
 
-                    int iterations = config.getCrossValidationIterations();
+                    int iterations = config.getValidationIterations();
                     double precision = 0;
                     double recall = 0;
                     double auc = 0;
                     double kappa = 0;
 
                     for (int i = 0; i < iterations; i++) {
-                        eval.crossValidateModel(model, trainData, config.getCrossValidationFolds(), new Random(config.getRandomSeed()));
+                        eval.crossValidateModel(model, trainData, config.getValidationFolds(), new Random(config.getRandomSeed()));
                         precision += eval.weightedPrecision();
                         recall += eval.weightedRecall();
                         auc += eval.weightedAreaUnderROC();
@@ -123,15 +121,9 @@ public class PredictionController extends CsvController {
                     auc = auc / iterations;
                     kappa = kappa / iterations;
 
-                    // Calcolo NPofB20 per la classe "buggy" (assumendo "Buggy" sia binaria e la classe positiva sia l'indice 1)
-                    int buggyIdx = trainData.classAttribute().indexOfValue("True");
-                    if (buggyIdx == -1) buggyIdx = 1; // fallback se non trova "True"
-                    double npofb20 = eval.numTruePositives(buggyIdx) /
-                            (eval.numTruePositives(buggyIdx) + eval.numFalseNegatives(buggyIdx) + 1e-10);
-
                     String message = format(
-                            "{0} - Precision: {1}, Recall: {2}, AUC: {3}, Kappa: {4}, NPofB20: {5}",
-                            modelName, precision, recall, auc, kappa, npofb20
+                            "{0} - Precision: {1}, Recall: {2}, AUC: {3}, Kappa: {4}",
+                            modelName, precision, recall, auc, kappa
                     );
                     LOGGER.log(Level.INFO, message);
 
@@ -142,8 +134,7 @@ public class PredictionController extends CsvController {
                             String.valueOf(precision),
                             String.valueOf(recall),
                             String.valueOf(auc),
-                            String.valueOf(kappa),
-                            String.valueOf(npofb20)
+                            String.valueOf(kappa)
                     );
                     lines.add(line);
                 }
@@ -270,7 +261,7 @@ public class PredictionController extends CsvController {
 
         WrapperSubsetEval evaluator = new WrapperSubsetEval();
         evaluator.setClassifier(model);
-        evaluator.setFolds(config.getCrossValidationFolds());
+        evaluator.setFolds(config.getValidationFolds());
         evaluator.setSeed(config.getRandomSeed());
         evaluator.setEvaluationMeasure(new SelectedTag(
                 WrapperSubsetEval.EVAL_ACCURACY, WrapperSubsetEval.TAGS_EVALUATION
@@ -282,6 +273,9 @@ public class PredictionController extends CsvController {
         selector.setEvaluator(evaluator);
         selector.setSearch(search);
         selector.SelectAttributes(data);
+
+        int[] selected = selector.selectedAttributes();
+        LOGGER.log(Level.INFO, "Attributi selezionati (wrapper search): {0}", Arrays.toString(selected));
 
         Instances reduced = selector.reduceDimensionality(data);
 
@@ -302,10 +296,17 @@ public class PredictionController extends CsvController {
     public Instances selectFeaturesWithInfoGainRanker(Instances data) throws Exception {
         AttributeSelection selector = new AttributeSelection();
         InfoGainAttributeEval evaluator = new InfoGainAttributeEval();
+
         Ranker search = new Ranker();
+        double threshold = config.getValidationFeatureSelectionThreshold();
+        int maxFeatures = config.getValidationFeatureSelectionFeatures();
+        if(threshold > 0) search.setThreshold(threshold);
+        if(maxFeatures > 0) search.setNumToSelect(maxFeatures);
+
         selector.setEvaluator(evaluator);
         selector.setSearch(search);
         selector.SelectAttributes(data);
+
         int[] selected = selector.selectedAttributes();
         LOGGER.log(Level.INFO, "Attributi selezionati (info gain): {0}", Arrays.toString(selected));
         return selector.reduceDimensionality(data);

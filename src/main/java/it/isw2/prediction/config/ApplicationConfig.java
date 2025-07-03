@@ -63,10 +63,10 @@ public class ApplicationConfig {
         return Integer.parseInt(this.get("random.seed"));
     }
 
-    public int getCrossValidationFolds() {
-        return Math.max(1, Integer.parseInt(this.get("prediction.validation.crossfold")));
+    public int getValidationFolds() {
+        return Math.max(2, Integer.parseInt(this.get("prediction.validation.crossfold")));
     }
-    public int getCrossValidationIterations() {
+    public int getValidationIterations() {
         return Math.max(1, Integer.parseInt(this.get("prediction.validation.iterations")));
     }
     public List<FeatureSelection> getValidationFeatureSelectionMethos() {
@@ -78,6 +78,12 @@ public class ApplicationConfig {
                 .toList();
     }
 
+    public double getValidationFeatureSelectionThreshold() {
+        return Double.parseDouble(this.get("prediction.validation.feature.info-gain.threshold"));
+    }
+    public int getValidationFeatureSelectionFeatures() {
+        return Integer.parseInt(this.get("prediction.validation.feature.info-gain.features"));
+    }
 
     public FeatureSelection getInferenceFeatureSelectionMethod() {
         return FeatureSelection.getByConfig(this.get("prediction.inference.feature.selection.method"));
