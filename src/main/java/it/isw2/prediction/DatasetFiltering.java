@@ -5,21 +5,20 @@ import it.isw2.prediction.controller.DatasetController;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class DatasetCreation {
+public class DatasetFiltering {
 
-    private static final Logger logger = Logger.getLogger(DatasetCreation.class.getName());
+    private static final Logger logger = Logger.getLogger(DatasetFiltering.class.getName());
 
     public static void main(String[] args) {
         try {
 
             DatasetController controller = new DatasetController();
-            controller.createDataset();
+            controller.filterDataset();
 
         } catch(Exception e) {
             logger.log(Level.SEVERE, "Errore durante la creazione del dataset", e);
             System.exit(1);
         }
     }
+
 }
-
-

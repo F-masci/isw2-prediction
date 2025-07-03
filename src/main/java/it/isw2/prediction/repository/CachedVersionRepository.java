@@ -110,6 +110,19 @@ public class CachedVersionRepository implements VersionRepository {
     }
 
     /**
+     * Sovrascrive il metodo originale aggiungendo la funzionalità di cache.
+     */
+    @Override
+    public Version retrieveLastReleasedVersion() {
+        loadVersionsCache();
+
+        return versionCache.values().stream()
+                .filter(version -> version.getReleaseDate() != null)
+                .max(Comparator.comparing(Version::getReleaseDate))
+                .orElse(null);
+    }
+
+    /**
      * Carica la cache delle versioni se non è già stata caricata.
      * Se la cache è già presente, non fa nulla.
      */

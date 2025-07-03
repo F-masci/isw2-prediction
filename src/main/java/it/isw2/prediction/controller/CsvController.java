@@ -1,21 +1,23 @@
 package it.isw2.prediction.controller;
 
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public abstract class CsvWriterController {
+public abstract class CsvController {
 
-    private static final Logger LOGGER = Logger.getLogger(CsvWriterController.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(CsvController.class.getName());
 
     protected void writeCsvFile(String csvFilePath, String header, List<String> lines) {
 
         try {
-            Files.createDirectories(Paths.get(csvFilePath));
+            Path parentDir = Paths.get(csvFilePath).getParent();
+            if (parentDir != null && !Files.exists(parentDir)) Files.createDirectories(parentDir);
         } catch (IOException _) {
             LOGGER.log(Level.SEVERE, () -> "Impossibile creare la directory: " + csvFilePath);
             System.exit(1);
@@ -31,6 +33,17 @@ public abstract class CsvWriterController {
         } catch (IOException e) {
             LOGGER.log(Level.SEVERE, e, () -> "Errore durante la creazione del file CSV: " + csvFilePath);
         }
+    }
+
+    public List<String[]> readCsvFile(String csvFilePath, String separator) throws IOException {
+        List<String[]> lines = new ArrayList<>();
+        try (BufferedReader br = new BufferedReader(new FileReader(csvFilePath))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                lines.add(line.split(separator, -1));
+            }
+        }
+        return lines;
     }
 
 }

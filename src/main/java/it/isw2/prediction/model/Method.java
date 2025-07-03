@@ -4,10 +4,15 @@ import java.io.IOException;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
+import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.expr.BinaryExpr;
+import com.github.javaparser.ast.stmt.*;
+import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import it.isw2.prediction.config.ApplicationConfig;
-import it.isw2.prediction.controller.DatasetCreationController;
 import it.isw2.prediction.exception.ticket.TicketRetrievalException;
 import it.isw2.prediction.factory.VersionRepositoryFactory;
 import it.isw2.prediction.repository.VersionRepository;
@@ -28,7 +33,10 @@ public class Method {
     private final String packageName;
 
     private final List<Version> versions = new ArrayList<>();
+    private Commit deleteCommit = null; // Commit in cui il metodo è stato eliminato
+
     private Map<Commit, Integer> locPerCommit = new HashMap<>();
+    private Map<Commit, Integer> statementPerCommit = new HashMap<>();
     private Map<Commit, Integer> cyclomaticComplexityPerCommit = new HashMap<>();
     private Map<Commit, Integer> cognitiveComplexityPerCommit = new HashMap<>();
     private Map<Version, Integer> methodHistoriesPerVersion = new HashMap<>();
@@ -66,6 +74,10 @@ public class Method {
 
     public String getPackageName() {
         return packageName;
+    }
+
+    public Commit getDeleteCommit() {
+        return deleteCommit;
     }
 
     /* --- VERSIONS --- */
@@ -162,9 +174,21 @@ public class Method {
 
     public void parseMethodDeclaration(Commit commit, MethodDeclaration methodDeclaration) throws TicketRetrievalException {
         this.addVersion(commit.getVersion());
-        boolean deleted = (methodDeclaration == null);
+        boolean deleted = false;
+        if(methodDeclaration == null) {
+            deleted = true;
+            this.deleteCommit = commit;
+
+            // Se il metodo è stato eliminato, calcola il churn come le loc del metodo
+            Version version = commit.getVersion();
+            int loc = this.getLOC(version);
+            deletedLinesPerCommit.put(commit, loc + deletedLinesPerCommit.getOrDefault(commit, 0));
+            churnPerCommit.put(commit, loc + churnPerCommit.getOrDefault(commit, 0));
+
+        }
         this.methodInfoPerCommit.put(commit, deleted ? null : computeMethodInfo(methodDeclaration));
         this.locPerCommit.put(commit, deleted ? 0 : computeLOC(methodDeclaration));
+        this.statementPerCommit.put(commit, deleted ? 0 : computeStatement(methodDeclaration));
         this.cyclomaticComplexityPerCommit.put(commit, deleted ? 0 : computeCyclomaticComplexity(methodDeclaration));
         this.cognitiveComplexityPerCommit.put(commit, deleted ? 0 : computeCognitiveComplexity(methodDeclaration));
         this.branchPointsPerCommit.put(commit, deleted ? 0 : computeBranchPoints(methodDeclaration));
@@ -186,6 +210,14 @@ public class Method {
 
     public void setLocPerCommit(Map<Commit, Integer> locPerCommit) {
         this.locPerCommit = locPerCommit;
+    }
+
+    public Map<Commit, Integer> getStatementPerCommit() {
+        return statementPerCommit;
+    }
+
+    public void setStatementPerCommit(Map<Commit, Integer> statementPerCommit) {
+        this.statementPerCommit = statementPerCommit;
     }
 
     public Map<Commit, Integer> getCyclomaticComplexityPerCommit() {
@@ -284,6 +316,10 @@ public class Method {
         return getMetricForVersion(locPerCommit, version);
     }
 
+    public int getStatement(Version version) {
+        return getMetricForVersion(statementPerCommit, version);
+    }
+
     public int getCyclomaticComplexity(Version version) {
         return getMetricForVersion(cyclomaticComplexityPerCommit, version);
     }
@@ -321,6 +357,30 @@ public class Method {
         return getMetricForVersion(parametersCountPerCommit, version);
     }
 
+    public int getMaxChurn(Version version) {
+        return getMaxForVersion(churnPerCommit, version);
+    }
+
+    public double getAvgChurn(Version version) {
+        return getAvgForVersion(churnPerCommit, version);
+    }
+
+    public int getMaxAddedLines(Version version) {
+        return getMaxForVersion(addedLinesPerCommit, version);
+    }
+
+    public double getAvgAddedLines(Version version) {
+        return getAvgForVersion(addedLinesPerCommit, version);
+    }
+
+    public int getMaxDeletedLines(Version version) {
+        return getMaxForVersion(deletedLinesPerCommit, version);
+    }
+
+    public double getAvgDeletedLines(Version version) {
+        return getAvgForVersion(deletedLinesPerCommit, version);
+    }
+
     private int getSumForVersion(Map<Commit, Integer> metricMap, Version version) {
         int sum = 0;
         for (Map.Entry<Commit, Integer> entry : metricMap.entrySet()) {
@@ -331,6 +391,25 @@ public class Method {
         return sum;
     }
 
+    private int getMaxForVersion(Map<Commit, Integer> metricMap, Version version) {
+        int max = 0;
+        for (Map.Entry<Commit, Integer> entry : metricMap.entrySet()) {
+            if (entry.getKey().getVersion().equals(version)) max = Math.max(max, entry.getValue());
+        }
+        return max;
+    }
+
+    private double getAvgForVersion(Map<Commit, Integer> metricMap, Version version) {
+        int sum = 0, count = 0;
+        for (Map.Entry<Commit, Integer> entry : metricMap.entrySet()) {
+            if (entry.getKey().getVersion().equals(version)) {
+                sum += entry.getValue();
+                count++;
+            }
+        }
+        return count > 0 ? (double) sum / count : 0.0;
+    }
+
     public boolean isBuggy(Version version) {
         return buggyPerVersion.getOrDefault(version, false);
     }
@@ -338,14 +417,15 @@ public class Method {
 
     private int getMetricForVersion(Map<Commit, Integer> metricMap, Version version) {
         Commit lastCommit = null;
+
+        // Trova l'ultimo commit che precede la data di rilascio della versione
         for (Commit commit : metricMap.keySet()) {
-            if (commit.getVersion().equals(version) && (lastCommit == null || commit.getDate().after(lastCommit.getDate()))) {
-                    lastCommit = commit;
-                }
+            if (commit.getDate().before(version.getReleaseDate()) && (lastCommit == null || commit.getDate().after(lastCommit.getDate()))) {
+                lastCommit = commit;
             }
-        if (lastCommit != null) {
-            return metricMap.get(lastCommit);
         }
+
+        if (lastCommit != null) return metricMap.get(lastCommit);
         return 0;
     }
 
@@ -357,7 +437,71 @@ public class Method {
     }
 
     private int computeLOC(MethodDeclaration methodDeclaration) {
+        return computePureLOC(methodDeclaration);
+    }
+
+    /**
+     * Calcola le linee di codice complete (LOC) per il metodo.
+     * Include tutte le linee tra l'inizio e la fine del metodo, indipendentemente da commenti o spazi vuoti.
+     */
+    private int computeCompleteLOC(MethodDeclaration methodDeclaration) {
         return methodDeclaration.getEnd().get().line - methodDeclaration.getBegin().get().line;
+    }
+
+    /**
+     * Calcola le linee di codice "pure" (LOC) per il metodo.
+     * Esclude commenti e spazi vuoti, ma include le linee di codice effettivo.
+     */
+    private int computePureLOC(MethodDeclaration methodDeclaration) {
+        if (methodDeclaration.getBody().isEmpty()) return 0;
+
+        BlockStmt body = methodDeclaration.getBody().get();
+        String[] lines = body.toString().split("\\R"); // supporta \n e \r\n
+        int count = 0;
+        boolean inBlockComment = false;
+
+        for (String line : lines) {
+            String trimmed = line.trim();
+
+            if (inBlockComment) {
+                if (trimmed.contains("*/")) inBlockComment = false;
+                continue;
+            }
+
+            if (trimmed.isEmpty()
+                    || trimmed.startsWith("//")
+                    || trimmed.startsWith("*")) {
+                continue;
+            }
+
+            if (trimmed.startsWith("/*")) {
+                if (!trimmed.contains("*/")) inBlockComment = true;
+                continue;
+            }
+
+            // Salta le righe che contengono solo una parentesi graffa
+            if (trimmed.equals("{") || trimmed.equals("}")) continue;
+
+            count++;
+        }
+
+        return count;
+    }
+
+    /**
+     * Conta il numero totale di istruzioni nel metodo.
+     */
+    public int computeStatement(MethodDeclaration methodDeclaration) {
+        if (methodDeclaration.getBody().isEmpty()) return 0;
+
+        BlockStmt body = methodDeclaration.getBody().get();
+
+        // Contiamo solo gli Statement diretti o annidati reali
+        List<Statement> statements = body.findAll(Statement.class).stream()
+                .filter(stmt -> !(stmt instanceof BlockStmt)) // Escludi blocchi vuoti
+                .collect(Collectors.toList());
+
+        return statements.size();
     }
 
     /**
@@ -365,10 +509,34 @@ public class Method {
      * Conta le strutture di controllo come if, for, while, switch e operatori logici.
      */
     private int computeCyclomaticComplexity(MethodDeclaration methodDeclaration) {
-        int complexity = 1;
-        String body = methodDeclaration.toString();
-        complexity += countRegex(body, "\\bif\\b|\\bfor\\b|\\bwhile\\b|\\bcase\\b|\\bcatch\\b|&&|\\|\\|");
-        return complexity;
+        CyclomaticComplexityVisitor visitor = new CyclomaticComplexityVisitor();
+        visitor.visit(methodDeclaration, null);
+        return visitor.getComplexity();
+    }
+
+    private static class CyclomaticComplexityVisitor extends VoidVisitorAdapter<Void> {
+        private int complexity = 1; // base
+
+        public int getComplexity() {
+            return complexity;
+        }
+
+        @Override public void visit(IfStmt n, Void arg) { complexity++; super.visit(n, arg); }
+        @Override public void visit(ForStmt n, Void arg) { complexity++; super.visit(n, arg); }
+        @Override public void visit(ForEachStmt n, Void arg) { complexity++; super.visit(n, arg); }
+        @Override public void visit(WhileStmt n, Void arg) { complexity++; super.visit(n, arg); }
+        @Override public void visit(DoStmt n, Void arg) { complexity++; super.visit(n, arg); }
+        @Override public void visit(CatchClause n, Void arg) { complexity++; super.visit(n, arg); }
+        @Override public void visit(SwitchEntry n, Void arg) {
+            if (!n.getLabels().isEmpty()) complexity++;
+            super.visit(n, arg);
+        }
+        @Override public void visit(BinaryExpr n, Void arg) {
+            if (n.getOperator() == BinaryExpr.Operator.AND || n.getOperator() == BinaryExpr.Operator.OR) {
+                complexity++;
+            }
+            super.visit(n, arg);
+        }
     }
 
     /**
@@ -376,17 +544,32 @@ public class Method {
      * Conta i livelli di annidamento di strutture di controllo come if, for, while, switch e case.
      */
     private int computeCognitiveComplexity(MethodDeclaration methodDeclaration) {
-        int complexity = 0;
-        int nesting = 0;
-        String[] lines = methodDeclaration.toString().split("\\r?\\n");
-        for (String line : lines) {
-            String trimmed = line.trim();
-            if (trimmed.matches("(if|for|while|switch).*\\(.*\\).*") || trimmed.startsWith("case ")) {
-                complexity += 1 + nesting;
-                nesting++;
+        return computeCognitiveComplexity(methodDeclaration.getBody().orElse(null), 0, 0);
+    }
+
+    private int computeCognitiveComplexity(Node node, int nesting, int complexity) {
+        if (node == null) return complexity;
+
+        for (Node child : node.getChildNodes()) {
+            int localAdd = 0;
+
+            if (child instanceof IfStmt || child instanceof ForStmt || child instanceof ForEachStmt ||
+                    child instanceof WhileStmt || child instanceof DoStmt || child instanceof CatchClause ||
+                    child instanceof SwitchStmt || child instanceof SwitchEntry) {
+                localAdd = 1 + nesting;
+                complexity += localAdd;
+                complexity = computeCognitiveComplexity(child, nesting + 1, complexity);
+            } else if (child instanceof BinaryExpr) {
+                BinaryExpr be = (BinaryExpr) child;
+                if (be.getOperator() == BinaryExpr.Operator.AND || be.getOperator() == BinaryExpr.Operator.OR) {
+                    complexity += 1;
+                }
+                complexity = computeCognitiveComplexity(child, nesting, complexity);
+            } else {
+                complexity = computeCognitiveComplexity(child, nesting, complexity);
             }
-            if (trimmed.equals("}") && nesting > 0) nesting--;
         }
+
         return complexity;
     }
 
@@ -402,27 +585,65 @@ public class Method {
      * Conta le strutture di controllo come if, for, while, switch e operatori logici.
      */
     private int computeBranchPoints(MethodDeclaration methodDeclaration) {
-        String body = methodDeclaration.toString();
-        return countRegex(body, "\\bif\\b|\\bfor\\b|\\bwhile\\b|\\bcase\\b|\\bcatch\\b|\\bswitch\\b|&&|\\|\\|");
+        BranchPointVisitor visitor = new BranchPointVisitor();
+        visitor.visit(methodDeclaration, null);
+        return visitor.getBranchPoints();
+    }
+
+    private static class BranchPointVisitor extends VoidVisitorAdapter<Void> {
+        private int count = 0;
+
+        public int getBranchPoints() {
+            return count;
+        }
+
+        @Override public void visit(IfStmt n, Void arg) { count++; super.visit(n, arg); }
+        @Override public void visit(ForStmt n, Void arg) { count++; super.visit(n, arg); }
+        @Override public void visit(ForEachStmt n, Void arg) { count++; super.visit(n, arg); }
+        @Override public void visit(WhileStmt n, Void arg) { count++; super.visit(n, arg); }
+        @Override public void visit(DoStmt n, Void arg) { count++; super.visit(n, arg); }
+        @Override public void visit(CatchClause n, Void arg) { count++; super.visit(n, arg); }
+        @Override public void visit(SwitchEntry n, Void arg) {
+            if (!n.getLabels().isEmpty()) count++;
+            super.visit(n, arg);
+        }
+        @Override public void visit(BinaryExpr n, Void arg) {
+            if (n.getOperator() == BinaryExpr.Operator.AND || n.getOperator() == BinaryExpr.Operator.OR) {
+                count++;
+            }
+            super.visit(n, arg);
+        }
     }
 
     /**
      * Calcola la profondità di annidamento per il metodo.
      * Conta il numero massimo di strutture di controllo annidate.
      */
+    /**
+     * Calcola la profondità di annidamento per il metodo.
+     * Conta il numero massimo di strutture di controllo annidate.
+     */
     private int computeNestingDepth(MethodDeclaration methodDeclaration) {
-        int maxNesting = 0;
-        int currentNesting = 0;
-        String[] lines = methodDeclaration.toString().split("\\r?\\n");
-        for (String line : lines) {
-            String trimmed = line.trim();
-            if (trimmed.matches("(if|for|while|switch).*\\(.*\\).*") || trimmed.startsWith("case ")) {
-                currentNesting++;
-                if (currentNesting > maxNesting) maxNesting = currentNesting;
+        return computeNestingDepth(methodDeclaration.getBody().orElse(null), 0);
+    }
+
+    private int computeNestingDepth(Node node, int currentDepth) {
+        if (node == null) return currentDepth;
+
+        int maxDepth = currentDepth;
+
+        for (Node child : node.getChildNodes()) {
+            if (child instanceof Statement) {
+                int childDepth = computeNestingDepth(child, currentDepth + 1);
+                maxDepth = Math.max(maxDepth, childDepth);
+            } else {
+                // continua a visitare anche se non è uno Statement, perché ci potrebbero essere blocchi dentro ad espressioni
+                int childDepth = computeNestingDepth(child, currentDepth);
+                maxDepth = Math.max(maxDepth, childDepth);
             }
-            if (trimmed.equals("}") && currentNesting > 0) currentNesting--;
         }
-        return maxNesting;
+
+        return maxDepth;
     }
 
     /**
@@ -496,9 +717,9 @@ public class Method {
             }
 
             // Salva i risultati nelle mappe
-            addedLinesPerCommit.put(commit, addedLines);
-            deletedLinesPerCommit.put(commit, deletedLines);
-            churnPerCommit.put(commit, addedLines + deletedLines);
+            addedLinesPerCommit.put(commit, addedLines + addedLinesPerCommit.getOrDefault(commit, 0));
+            deletedLinesPerCommit.put(commit, deletedLines + deletedLinesPerCommit.getOrDefault(commit, 0));
+            churnPerCommit.put(commit, addedLines + deletedLines + churnPerCommit.getOrDefault(commit, 0));
 
         } catch (IOException e) {
             LOGGER.log(Level.SEVERE, e, () -> "Errore nel calcolo del churn per il metodo " + getFullName());

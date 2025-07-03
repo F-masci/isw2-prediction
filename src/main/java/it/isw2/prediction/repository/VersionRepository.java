@@ -58,4 +58,10 @@ public interface VersionRepository {
      */
     List<Version> retrieveVersionsBetweenDates(Date startDate, Date endDate);
 
+    /**
+     * Recupera l'ultima versione rilasciata.
+     *
+     * @return l'ultima versione rilasciata o null se non esiste
+     */
+    Version retrieveLastReleasedVersion();
 }

@@ -117,4 +117,17 @@ public class VersionRepositoryImpl implements VersionRepository {
             return null;
         }
     }
+
+    @Override
+    public Version retrieveLastReleasedVersion() {
+        try {
+            return retrieveVersions().stream()
+                    .filter(version -> version.getReleaseDate() != null)
+                    .max(Comparator.comparing(Version::getReleaseDate))
+                    .orElse(null);
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, e, () -> "Errore nel recupero dell'ultima versione rilasciata");
+            return null;
+        }
+    }
 }

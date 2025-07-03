@@ -2,7 +2,7 @@ package it.isw2.prediction;
 
 public enum Project {
 
-    BOOKKEPER("BOOKKEPER", 12311293, "bookkeeper"),
+    BOOKKEPER("BOOKKEEPER", 12311293, "bookkeeper"),
     OPENJPA("OPENJPA", 12310351, "openjpa"),;
 
     private final String key;

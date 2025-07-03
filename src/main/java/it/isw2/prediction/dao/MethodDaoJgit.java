@@ -9,8 +9,10 @@ import it.isw2.prediction.config.ApplicationConfig;
 import it.isw2.prediction.config.GitApiConfig;
 import it.isw2.prediction.exception.ticket.TicketRetrievalException;
 import it.isw2.prediction.factory.CommitRepositoryFactory;
+import it.isw2.prediction.factory.VersionRepositoryFactory;
 import it.isw2.prediction.model.Commit;
 import it.isw2.prediction.model.Method;
+import it.isw2.prediction.model.Version;
 import it.isw2.prediction.repository.CommitRepository;
 import it.isw2.prediction.utils.Utils;
 import org.eclipse.jgit.api.Git;
@@ -46,7 +48,7 @@ public class MethodDaoJgit implements MethodDao {
             // FIXME: per ora prendo solo un piccolo campione di commit
             commits = commits.stream()
                     .sorted(Comparator.comparing(Commit::getDate))
-                    // .limit(100)
+                    // .limit(15)
                     .toList();
 
             // Apro il repository Git
@@ -61,7 +63,10 @@ public class MethodDaoJgit implements MethodDao {
                     .build()) {
 
                 // Per ogni commit, recupero i file Java ed estraggo i metodi
-                for (Commit commit : commits) addMethodsFromCommit(repository, methods, commit);
+                for (Commit commit : commits) {
+                    LOGGER.log(Level.INFO, "Analizzo il commit {0} ({1})", new Object[]{commit.getId(), commit.getDate()});
+                    addMethodsFromCommit(repository, methods, commit);
+                }
 
                 LOGGER.log(Level.INFO, "Recuperati {0} metodi unici dal progetto.", methods.size());
             }
@@ -69,6 +74,15 @@ public class MethodDaoJgit implements MethodDao {
         } catch (IOException e) {
             LOGGER.log(Level.SEVERE, "Errore nell'apertura del repository Git", e);
         }
+
+        Version lastVersion = VersionRepositoryFactory.getInstance()
+                .getVersionRepository()
+                .retrieveLastReleasedVersion();
+
+        methods.values().forEach((method) -> {
+            // Se il metodo non è stato eliminato, aggiungo la versione corrente come versione del metodo
+            if(method.getDeleteCommit() == null) method.addVersion(lastVersion);
+        });
 
         return new ArrayList<>(methods.values());
     }

@@ -37,6 +37,7 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
         int startAt = 0;
         int maxResults = 1000;
         int results = 0;
+        int expectedTotal = -1;
 
         try {
             do {
@@ -65,6 +66,10 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
 
                 // Parsing della risposta JSON
                 JsonNode rootNode = OBJECT_MAPPER.readTree(response.body());
+                if(expectedTotal < 0) {
+                    expectedTotal = rootNode.get("total").asInt();
+                    TicketBuilder.setExpectedTotal(expectedTotal);
+                }
                 JsonNode issues = rootNode.get("issues");
 
                 // Controllo se issues è un array e parsing dei ticket
@@ -142,9 +147,6 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
                 builder.withAffectedVersion(versionId);
                 affectedVersion = true;
             }
-        }
-        if(!affectedVersion) {
-            builder.withProportionalAffectedVersion();
         }
 
         try {

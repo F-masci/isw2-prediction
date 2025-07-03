@@ -37,5 +37,8 @@ build/
 ### Dataset ###
 data/
 
-### Predizione ###
+### Output ###
 output/
+
+### Progetti ###
+projects/

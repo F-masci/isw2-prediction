@@ -9,6 +9,7 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class Ticket {
@@ -137,7 +138,9 @@ public class Ticket {
         CommitRepository commitRepository = CommitRepositoryFactory.getInstance().getCommitRepository();
         List<Commit> allCommits = commitRepository.retrieveCommits();
         for (Commit commit : allCommits) {
-            if (commit.getShortMessage().contains(getKey())) this.commits.add(commit);
+            if (commit.getShortMessage().matches(".*\\b" + Pattern.quote(getKey()) + "\\b.*")) {
+                this.commits.add(commit);
+            }
         }
     }
 

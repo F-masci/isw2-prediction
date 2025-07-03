@@ -1,5 +1,6 @@
 package it.isw2.prediction.builder;
 
+import it.isw2.prediction.config.ApplicationConfig;
 import it.isw2.prediction.exception.ticket.TicketRetrievalException;
 import it.isw2.prediction.factory.VersionRepositoryFactory;
 import it.isw2.prediction.model.Commit;
@@ -24,12 +25,25 @@ public class TicketBuilder {
     private boolean isProportionalVersion = false;
 
     // Variabile statica per la proporzione con sliding window
-    private static double proportionValue = 1; // Valore di default
-    private static final int WINDOW_SIZE = 5; // Dimensione della finestra scorrevole
-    private static final List<Double> recentProportions = new ArrayList<>(WINDOW_SIZE);
+    private static double proportionValue; // Valore di proportion
+    private static final double WINDOW_SIZE_PERCENTAGE; // Dimensione della finestra scorrevole
+    private static final List<Double> recentProportions = new ArrayList<>();
+    private static int expectedTotal = -1; // Numero totale di ticket attesi per il calcolo della proporzione
+    private static int totalCounter = 0; // Contatore totale per il calcolo della dimensione della finestra
     private static int proportionCounter = 0;
 
     private final VersionRepository versionRepository;
+
+    static {
+        // Inizializza la configurazione della proporzione
+        ApplicationConfig config = new ApplicationConfig();
+        proportionValue = config.getStartProportionValue();
+        WINDOW_SIZE_PERCENTAGE = config.getProportionWindowSize();
+    }
+
+    public static void setExpectedTotal(int expectedTotal) {
+        TicketBuilder.expectedTotal = expectedTotal;
+    }
 
     public TicketBuilder (int id, String key, Date creationDate, Date resolutionDate, Date updateDate) {
         this.ticket = new Ticket(id, key, creationDate, resolutionDate, updateDate);
@@ -51,30 +65,12 @@ public class TicketBuilder {
         Version version = versionRepository.retrieveVersionById(affectedVersionId);
         if(version == null) return this;
 
-        // Se la versione è maggiore della versione di apertura, usa la proporzione
-        if(version.getReleaseDate().after(openingVersion.getReleaseDate())) return withProportionalAffectedVersion();
+        // Se la versione è maggiore della versione di apertura, ignorala
+        if(version.getReleaseDate().after(openingVersion.getReleaseDate())) return this;
 
         // Se la versione è precedente alla versione di apertura, la setta come affectedVersion
         this.affectedVersion = version;
         this.isProportionalVersion = false;
-        return this;
-    }
-
-    /**
-     * Imposta la versione affetta utilizzando il metodo della proporzione
-     * @return this builder (per method chaining)
-     */
-    public TicketBuilder withProportionalAffectedVersion() {
-        if (openingVersion == null || fixedVersion == null) return this;
-
-        TicketBuilder.proportionCounter++;
-        LOGGER.log(Level.INFO, () -> "Utilizzo di proportion sul ticket " + ticket.getKey() + " (contatore: " + proportionCounter + ", valore proporzionale: " + proportionValue + ")");
-
-        Version proportionalVersion = computeProportionalVersion();
-        if (proportionalVersion != null) {
-            this.affectedVersion = proportionalVersion;
-            this.isProportionalVersion = true;
-        }
         return this;
     }
 
@@ -90,28 +86,31 @@ public class TicketBuilder {
 
     public Ticket build() throws TicketRetrievalException {
 
-        if(openingVersion == null || fixedVersion == null) throw new TicketRetrievalException("Impossibile costruire il ticket: openingVersion o fixedVersion non sono stati impostati correttamente");
+        if(openingVersion == null || fixedVersion == null)
+            throw new TicketRetrievalException("Impossibile costruire il ticket: openingVersion o fixedVersion non sono stati impostati correttamente");
 
-        if(this.openingVersion != null) ticket.setOpeningVersion(openingVersion);
-        if(this.fixedVersion != null) ticket.setFixedVersion(fixedVersion);
-        if (this.affectedVersion != null) {
-            ticket.setBaseAffectedVersion(affectedVersion, isProportionalVersion);
+        ticket.setOpeningVersion(openingVersion);
+        ticket.setFixedVersion(fixedVersion);
 
-            // Se non è stata usata la proporzione, memorizza il risultato effettivo
-            if (!isProportionalVersion) {
-                List<Version> versions = versionRepository.retrieveVersions();
+        // Se affectedVersion non è già stata impostata, calcolare la versione proporzionale
+        if (this.affectedVersion == null) {
+            TicketBuilder.proportionCounter++;
+            LOGGER.log(Level.INFO, () -> "Utilizzo di proportion sul ticket " + ticket.getKey() + " (contatore: " + proportionCounter + ", valore proporzionale: " + proportionValue + ")");
 
-                // Calcola la proporzione effettiva
-                int fixedIndex = versions.indexOf(fixedVersion);
-                int openingIndex = versions.indexOf(openingVersion);
-                int injectedIndex = versions.indexOf(affectedVersion);
+            Version proportionalVersion = computeProportionalVersion();
+            if(proportionalVersion == null) throw new TicketRetrievalException("Impossibile calcolare la versione proporzionale per il ticket: " + ticket.getKey());
 
-                if (fixedIndex - openingIndex > 0) {
-                    double actualProportion = (double) (fixedIndex - injectedIndex) / (fixedIndex - openingIndex);
-                    updateProportionValue(actualProportion);
-                }
-            }
+            this.affectedVersion = proportionalVersion;
+            this.isProportionalVersion = true;
         }
+
+        // Imposta la versione affected
+        ticket.setBaseAffectedVersion(affectedVersion, isProportionalVersion);
+
+        TicketBuilder.totalCounter++;
+
+        if (!isProportionalVersion) updateProportionValue();
+
         return ticket;
     }
 
@@ -139,13 +138,26 @@ public class TicketBuilder {
 
     /**
      * Aggiorna il valore di proporzione dopo ogni utilizzo e calcola la media mobile
-     * @param actualProportion il valore di proporzione effettivamente osservato
      */
-    public static void updateProportionValue(double actualProportion) {
-        // Aggiungi il nuovo valore alla lista delle proporzioni recenti
-        if (recentProportions.size() >= WINDOW_SIZE) {
-            recentProportions.removeFirst();
-        }
+    public void updateProportionValue() {
+
+        // Se non è stata usata la proporzione, memorizza il risultato effettivo
+        List<Version> versions = versionRepository.retrieveVersions();
+
+        // Calcola la proporzione effettiva
+        int fixedIndex = versions.indexOf(fixedVersion);
+        int openingIndex = versions.indexOf(openingVersion);
+        int injectedIndex = versions.indexOf(affectedVersion);
+
+        double actualProportion = fixedIndex - openingIndex > 0 ? (double) (fixedIndex - injectedIndex) / (fixedIndex - openingIndex) : 0;
+
+        // Calcola la dimensione della finestra scorrevole
+        int windowSize = (int) Math.max(1, Math.ceil(WINDOW_SIZE_PERCENTAGE * TicketBuilder.totalCounter));;
+        if(TicketBuilder.expectedTotal >= 0) windowSize = (int) Math.max(1, Math.ceil(WINDOW_SIZE_PERCENTAGE * TicketBuilder.expectedTotal));
+
+        // Aggiungi il nuovo valore alla lista delle proporzioni
+        if (recentProportions.size() >= windowSize) recentProportions.removeFirst();
+
         recentProportions.add(actualProportion);
 
         // Calcola la media mobile delle proporzioni
@@ -154,7 +166,7 @@ public class TicketBuilder {
             sum += value;
         }
 
-        proportionValue = sum / recentProportions.size();
+        TicketBuilder.proportionValue = sum / recentProportions.size();
     }
 
 }
