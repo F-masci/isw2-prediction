@@ -57,7 +57,12 @@ public class VersionDaoRest extends DaoRest implements VersionDao {
                     // Itera su ogni versione
                     for (JsonNode versionNode : values) {
                         // Parsing della versione
-                        versions.add(parseVersion(versionNode));
+                        Version version = parseVersion(versionNode);
+                        if(version == null) {
+                            logger.log(Level.WARNING, "Versione non valida trovata: {0}", versionNode);
+                            continue; // Salta le versioni non valide
+                        }
+                        versions.add(version);
                         results++;
                     }
                 }
@@ -100,6 +105,9 @@ public class VersionDaoRest extends DaoRest implements VersionDao {
             } catch (ParseException e) {
                 logger.log(Level.WARNING, "Errore durante il parsing della data di rilascio: {0}", e.getMessage());
             }
+        } else {
+            logger.log(Level.WARNING, "Data di rilascio non valida per la versione: {0}", name);
+            return null;
         }
 
         // Creazione della versione

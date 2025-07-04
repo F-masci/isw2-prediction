@@ -75,14 +75,18 @@ public class MethodDaoJgit implements MethodDao {
             LOGGER.log(Level.SEVERE, "Errore nell'apertura del repository Git", e);
         }
 
-        Version lastVersion = VersionRepositoryFactory.getInstance()
-                .getVersionRepository()
-                .retrieveLastReleasedVersion();
+        ApplicationConfig appConfig = new ApplicationConfig();
+        if(appConfig.isMethodAllVersionEnabled()) {
+            // Se l'opzione per tutte le versioni di metodo è abilitata, aggiungo l'ultima versione rilasciata alle versioni dei metodi non eliminati
+            Version lastVersion = VersionRepositoryFactory.getInstance()
+                    .getVersionRepository()
+                    .retrieveLastReleasedVersion();
 
-        methods.values().forEach((method) -> {
-            // Se il metodo non è stato eliminato, aggiungo la versione corrente come versione del metodo
-            if(method.getDeleteCommit() == null) method.addVersion(lastVersion);
-        });
+            methods.values().forEach((method) -> {
+                // Se il metodo non è stato eliminato, aggiungo la versione corrente come versione del metodo
+                if (method.getDeleteCommit() == null) method.addVersion(lastVersion);
+            });
+        }
 
         return new ArrayList<>(methods.values());
     }
