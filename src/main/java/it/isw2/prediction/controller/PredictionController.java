@@ -19,10 +19,10 @@ import weka.filters.unsupervised.attribute.StringToNominal;
 import java.io.File;
 import java.io.FileWriter;
 import java.nio.file.Paths;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -44,10 +44,8 @@ public class PredictionController extends CsvController {
 
         String whatIfPath = Paths.get(outputDir, projectName + "_whatif.csv").toString();
         File whatIfFile = new File(whatIfPath);
-        if (whatIfFile.exists()) {
-            if (!whatIfFile.delete()) {
-                LOGGER.log(Level.WARNING, "Impossibile cancellare il file whatif esistente: " + whatIfPath);
-            }
+        if (whatIfFile.exists() && !whatIfFile.delete()) {
+            LOGGER.log(Level.WARNING, "Impossibile cancellare il file whatif esistente: {0}", whatIfPath);
         }
 
     }
@@ -129,9 +127,12 @@ public class PredictionController extends CsvController {
                     double auc = 0;
                     double kappa = 0;
 
+                    SecureRandom random = new SecureRandom();
+                    random.setSeed(config.getRandomSeed());
+
                     for (int i = 0; i < iterations; i++) {
                         printMemoryUsage("Memoria evaluation iterazione " + (i + 1));
-                        eval.crossValidateModel(model, trainData, config.getValidationFolds(), new Random(config.getRandomSeed()));
+                        eval.crossValidateModel(model, trainData, config.getValidationFolds(), random);
                         precision += eval.weightedPrecision();
                         recall += eval.weightedRecall();
                         auc += eval.weightedAreaUnderROC();
@@ -226,38 +227,38 @@ public class PredictionController extends CsvController {
             LOGGER.log(Level.INFO, "Modello addestrato: {0}", selectedModel);
 
             // A = istanze completa
-            Instances A = new Instances(reducedData);
+            Instances instanceA = new Instances(reducedData);
 
             // B+ = istanze con actionable > 0
-            Instances Bplus = new Instances(reducedData, 0);
+            Instances instanceBplus = new Instances(reducedData, 0);
             for (int i = 0; i < reducedData.numInstances(); i++) {
                 Instance inst = reducedData.instance(i);
                 if (inst.value(actionableIdx) > 0) {
-                    Bplus.add(inst);
+                    instanceBplus.add(inst);
                 }
             }
 
             // C = istanze con actionable == 0
-            Instances C = new Instances(reducedData, 0);
+            Instances instanceC = new Instances(reducedData, 0);
             for (int i = 0; i < reducedData.numInstances(); i++) {
                 Instance inst = reducedData.instance(i);
                 if (inst.value(actionableIdx) == 0) {
-                    C.add(inst);
+                    instanceC.add(inst);
                 }
             }
 
             // B = copia di B+ con actionable settato a 0
-            Instances B = new Instances(Bplus);
-            for (int i = 0; i < B.numInstances(); i++) {
-                B.instance(i).setValue(actionableIdx, 0);
+            Instances instanceB = new Instances(instanceBplus);
+            for (int i = 0; i < instanceB.numInstances(); i++) {
+                instanceB.instance(i).setValue(actionableIdx, 0);
             }
 
-            LOGGER.log(Level.INFO, "Dataset creati: {0} istanze in B+, {1} in C, {2} in B", new Object[]{Bplus.numInstances(), C.numInstances(), B.numInstances()});
+            LOGGER.log(Level.INFO, "Dataset creati: {0} istanze in B+, {1} in C, {2} in B", new Object[]{instanceBplus.numInstances(), instanceC.numInstances(), instanceB.numInstances()});
 
-            predictDataset(data, A, model, "A");
-            predictDataset(data, Bplus, model, "Bplus");
-            predictDataset(data, C, model, "C");
-            predictDataset(data, B, model, "B");
+            predictDataset(data, instanceA, model, "A");
+            predictDataset(data, instanceBplus, model, "Bplus");
+            predictDataset(data, instanceC, model, "C");
+            predictDataset(data, instanceB, model, "B");
 
             LOGGER.log(Level.INFO, "Predizione completata");
 
@@ -269,12 +270,6 @@ public class PredictionController extends CsvController {
 
     // Metodo di utilità per predire e scrivere su file
     private void predictDataset(Instances originalData, Instances reducedData, Classifier model, String suffix) throws Exception {
-
-        // Limita a massimo 50 istanze
-        // int predictionLimit = 50;
-        // if (predictionLimit > 0) {
-        //     data = new Instances(data, 0, Math.min(predictionLimit, data.numInstances()));
-        //}
 
         LOGGER.log(Level.INFO, "Predizione su {0} istanze ({1})", new Object[]{reducedData.numInstances(), suffix});
 
@@ -324,9 +319,7 @@ public class PredictionController extends CsvController {
         for (String line : lines) {
             String[] cols = line.split(SEPARATOR, -1);
             if (cols.length < 7) continue;
-            if (!datasetName.equals("B")) {
-                if (cols[actualIdx].equalsIgnoreCase("True") || cols[actualIdx].equalsIgnoreCase("Yes")) realBuggy++;
-            }
+            if (!datasetName.equals("B") && (cols[actualIdx].equalsIgnoreCase("True") || cols[actualIdx].equalsIgnoreCase("Yes"))) realBuggy++;
             if (cols[predictedIdx].equalsIgnoreCase("True") || cols[predictedIdx].equalsIgnoreCase("Yes")) predictedBuggy++;
         }
 
@@ -349,7 +342,7 @@ public class PredictionController extends CsvController {
             }
             fw.write(summary + System.lineSeparator());
         } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Errore scrittura stats su file: " + outputPath, e);
+            LOGGER.log(Level.WARNING, e, () -> "Errore scrittura stats su file: " + outputPath);
         }
     }
 
@@ -464,8 +457,6 @@ public class PredictionController extends CsvController {
             SpearmansCorrelation corr = new SpearmansCorrelation();
             double spearman = corr.correlation(x, y);
 
-            // Log + CSV
-            LOGGER.log(Level.INFO, String.format("%s: Pearson=%.6f, Spearman=%.6f", data.attribute(i).name(), pearson, spearman));
             lines.add(String.format("%s;%.6f;%.6f", data.attribute(i).name(), pearson, spearman));
         }
 
