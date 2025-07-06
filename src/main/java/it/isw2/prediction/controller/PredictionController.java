@@ -2,6 +2,7 @@ package it.isw2.prediction.controller;
 
 import it.isw2.prediction.FeatureSelection;
 import it.isw2.prediction.config.ApplicationConfig;
+import org.apache.commons.math3.stat.correlation.SpearmansCorrelation;
 import weka.attributeSelection.*;
 import weka.classifiers.Classifier;
 import weka.classifiers.trees.RandomForest;
@@ -446,53 +447,28 @@ public class PredictionController extends CsvController {
 
         for (int i = 0; i < data.numAttributes(); i++) {
             if (i == classIndex) continue;
+
             // Pearson
             double pearson = pearsonEval.evaluateAttribute(i);
 
-            // Spearman
+            // Spearman con Apache Commons Math
             double[] x = new double[data.numInstances()];
             double[] y = new double[data.numInstances()];
             for (int j = 0; j < data.numInstances(); j++) {
                 x[j] = data.instance(j).value(i);
                 y[j] = data.instance(j).classValue();
             }
-            double spearman = spearmanCorrelation(x, y);
+            SpearmansCorrelation corr = new SpearmansCorrelation();
+            double spearman = corr.correlation(x, y);
 
-            // Stampa a schermo
+            // Log + CSV
             LOGGER.log(Level.INFO, String.format("%s: Pearson=%.6f, Spearman=%.6f", data.attribute(i).name(), pearson, spearman));
-
-            // Scrivi su CSV
             lines.add(String.format("%s;%.6f;%.6f", data.attribute(i).name(), pearson, spearman));
         }
 
         // Scrivi file CSV
         String correlationCsvPath = Paths.get(outputDir, projectName + "_correlation.csv").toString();
         writeCsvFile(correlationCsvPath, header, lines.subList(1, lines.size())); // header già incluso
-    }
-
-    // Calcolo della correlazione di Spearman
-    private double spearmanCorrelation(double[] x, double[] y) {
-        double[] rx = rank(x);
-        double[] ry = rank(y);
-        double meanRx = Arrays.stream(rx).average().orElse(0);
-        double meanRy = Arrays.stream(ry).average().orElse(0);
-        double num = 0, denX = 0, denY = 0;
-        for (int i = 0; i < x.length; i++) {
-            num += (rx[i] - meanRx) * (ry[i] - meanRy);
-            denX += Math.pow(rx[i] - meanRx, 2);
-            denY += Math.pow(ry[i] - meanRy, 2);
-        }
-        return num / Math.sqrt(denX * denY + 1e-10);
-    }
-
-    // Funzione per calcolare i ranghi
-    private double[] rank(double[] values) {
-        Integer[] idx = new Integer[values.length];
-        for (int i = 0; i < values.length; i++) idx[i] = i;
-        Arrays.sort(idx, Comparator.comparingDouble(i -> values[i]));
-        double[] ranks = new double[values.length];
-        for (int i = 0; i < values.length; i++) ranks[idx[i]] = i + 1;
-        return ranks;
     }
 
     private void printMemoryUsage(String message) {
