@@ -1,6 +1,8 @@
 package it.isw2.prediction.factory;
 
-import it.isw2.prediction.repository.*;
+import it.isw2.prediction.repository.CachedMethodRepository;
+import it.isw2.prediction.repository.MethodRepository;
+import it.isw2.prediction.repository.MethodRepositoryImpl;
 
 public class MethodRepositoryFactory {
 

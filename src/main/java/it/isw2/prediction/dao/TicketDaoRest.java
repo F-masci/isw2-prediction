@@ -5,19 +5,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import it.isw2.prediction.Project;
 import it.isw2.prediction.builder.TicketBuilder;
 import it.isw2.prediction.config.ApplicationConfig;
+import it.isw2.prediction.config.JiraApiConfig;
 import it.isw2.prediction.exception.RetrievalException;
+import it.isw2.prediction.exception.ticket.TicketParsingException;
 import it.isw2.prediction.exception.ticket.TicketRetrievalException;
 import it.isw2.prediction.model.Ticket;
-import it.isw2.prediction.exception.ticket.TicketParsingException;
-import it.isw2.prediction.config.JiraApiConfig;
 
 import java.net.URLEncoder;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.util.Date;
-import java.text.SimpleDateFormat;
 import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -139,13 +139,11 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
         TicketBuilder builder = new TicketBuilder(Integer.parseInt(id), key, creationDate, resolutionDate, updateDate);
 
         // Parsing delle affected versioni
-        boolean affectedVersion = false;
         if (fields.has(affectedVersionField) && fields.get(affectedVersionField).isArray()) {
             for (JsonNode versionNode : fields.get(affectedVersionField)) {
                 // Parsing della versione
                 int versionId = versionNode.get("id").asInt();
                 builder.withAffectedVersion(versionId);
-                affectedVersion = true;
             }
         }
 

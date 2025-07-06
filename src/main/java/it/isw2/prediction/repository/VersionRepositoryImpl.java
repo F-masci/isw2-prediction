@@ -5,13 +5,9 @@ import it.isw2.prediction.exception.version.VersionRetrievalException;
 import it.isw2.prediction.factory.VersionDaoFactory;
 import it.isw2.prediction.model.Version;
 
-import java.util.Date;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 
 /**
  * Implementazione concreta del repository per le versioni.
@@ -114,7 +110,7 @@ public class VersionRepositoryImpl implements VersionRepository {
                     .toList();
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, e, () -> "Errore nel recupero della versione tra le date: " + startDate + " e " + endDate);
-            return null;
+            return Collections.emptyList();
         }
     }
 

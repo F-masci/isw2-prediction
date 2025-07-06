@@ -41,6 +41,18 @@ public class TicketBuilder {
         WINDOW_SIZE_PERCENTAGE = config.getProportionWindowSize();
     }
 
+    private static void incrementTotalCounter() {
+        TicketBuilder.totalCounter++;
+    }
+
+    private static void incrementProprortionCounter() {
+        TicketBuilder.proportionCounter++;
+    }
+
+    private static void setProportionValue(double proportionValue) {
+        TicketBuilder.proportionValue = proportionValue;
+    }
+
     public static void setExpectedTotal(int expectedTotal) {
         TicketBuilder.expectedTotal = expectedTotal;
     }
@@ -94,7 +106,7 @@ public class TicketBuilder {
 
         // Se affectedVersion non è già stata impostata, calcolare la versione proporzionale
         if (this.affectedVersion == null) {
-            TicketBuilder.proportionCounter++;
+            incrementProprortionCounter();
             LOGGER.log(Level.INFO, () -> "Utilizzo di proportion sul ticket " + ticket.getKey() + " (contatore: " + proportionCounter + ", valore proporzionale: " + proportionValue + ")");
 
             Version proportionalVersion = computeProportionalVersion();
@@ -107,7 +119,7 @@ public class TicketBuilder {
         // Imposta la versione affected
         ticket.setBaseAffectedVersion(affectedVersion, isProportionalVersion);
 
-        TicketBuilder.totalCounter++;
+        incrementTotalCounter();
 
         if (!isProportionalVersion) updateProportionValue();
 
@@ -152,7 +164,7 @@ public class TicketBuilder {
         double actualProportion = fixedIndex - openingIndex > 0 ? (double) (fixedIndex - injectedIndex) / (fixedIndex - openingIndex) : 0;
 
         // Calcola la dimensione della finestra scorrevole
-        int windowSize = (int) Math.max(1, Math.ceil(WINDOW_SIZE_PERCENTAGE * TicketBuilder.totalCounter));;
+        int windowSize = (int) Math.max(1, Math.ceil(WINDOW_SIZE_PERCENTAGE * TicketBuilder.totalCounter));
         if(TicketBuilder.expectedTotal >= 0) windowSize = (int) Math.max(1, Math.ceil(WINDOW_SIZE_PERCENTAGE * TicketBuilder.expectedTotal));
 
         // Aggiungi il nuovo valore alla lista delle proporzioni
@@ -166,7 +178,7 @@ public class TicketBuilder {
             sum += value;
         }
 
-        TicketBuilder.proportionValue = sum / recentProportions.size();
+        setProportionValue(sum / recentProportions.size());
     }
 
 }

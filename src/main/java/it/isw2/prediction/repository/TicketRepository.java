@@ -2,6 +2,7 @@ package it.isw2.prediction.repository;
 
 import it.isw2.prediction.exception.ticket.TicketRetrievalException;
 import it.isw2.prediction.model.Ticket;
+
 import java.util.List;
 
 /**

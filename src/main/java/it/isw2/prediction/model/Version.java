@@ -7,7 +7,10 @@ import it.isw2.prediction.factory.TicketRepositoryFactory;
 import it.isw2.prediction.repository.CommitRepository;
 import it.isw2.prediction.repository.TicketRepository;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.EnumMap;
+import java.util.List;
 
 public class Version {
 

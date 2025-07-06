@@ -5,12 +5,11 @@ import it.isw2.prediction.factory.VersionRepositoryFactory;
 import it.isw2.prediction.repository.CommitRepository;
 import it.isw2.prediction.repository.VersionRepository;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 public class Ticket {
 

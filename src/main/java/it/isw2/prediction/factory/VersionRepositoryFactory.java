@@ -1,6 +1,8 @@
 package it.isw2.prediction.factory;
 
-import it.isw2.prediction.repository.*;
+import it.isw2.prediction.repository.CachedVersionRepository;
+import it.isw2.prediction.repository.VersionRepository;
+import it.isw2.prediction.repository.VersionRepositoryImpl;
 
 /**
  * Factory per la creazione di istanze di VersionRepository.

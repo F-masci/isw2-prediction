@@ -5,25 +5,28 @@ import it.isw2.prediction.config.ApplicationConfig;
 import org.apache.commons.math3.stat.correlation.SpearmansCorrelation;
 import weka.attributeSelection.*;
 import weka.classifiers.Classifier;
-import weka.classifiers.trees.RandomForest;
+import weka.classifiers.Evaluation;
 import weka.classifiers.bayes.NaiveBayes;
 import weka.classifiers.lazy.IBk;
-import weka.classifiers.Evaluation;
+import weka.classifiers.trees.RandomForest;
 import weka.core.Instance;
 import weka.core.Instances;
+import weka.core.SelectedTag;
 import weka.core.converters.CSVLoader;
 import weka.filters.Filter;
 import weka.filters.unsupervised.attribute.StringToNominal;
-import weka.core.SelectedTag;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static java.text.MessageFormat.*;
+import static java.text.MessageFormat.format;
 
 public class PredictionController extends CsvController {
 

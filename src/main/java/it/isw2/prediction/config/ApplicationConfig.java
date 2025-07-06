@@ -7,6 +7,7 @@ import it.isw2.prediction.exception.ConfigException;
 import java.io.InputStream;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.Properties;
 
 public class ApplicationConfig {
@@ -74,7 +75,7 @@ public class ApplicationConfig {
         return Arrays.stream(value.split(";"))
                 .map(String::trim)
                 .map(FeatureSelection::getByConfig)
-                .filter(fs -> fs != null)
+                .filter(Objects::nonNull)
                 .toList();
     }
 
