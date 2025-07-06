@@ -128,27 +128,36 @@ public class MethodDaoFile implements MethodDao {
         try (DirectoryStream<Path> packageDirs = Files.newDirectoryStream(baseDir)) {
             for (Path packageDir : packageDirs) {
                 if (!Files.isDirectory(packageDir)) continue;
-                try (DirectoryStream<Path> classDirs = Files.newDirectoryStream(packageDir)) {
-                    for (Path classDir : classDirs) {
-                        if (!Files.isDirectory(classDir)) continue;
-                        try (DirectoryStream<Path> methodDirs = Files.newDirectoryStream(classDir)) {
-                            for (Path methodDir : methodDirs) {
-                                if (!Files.isDirectory(methodDir)) continue;
-                                Path infoFile = methodDir.resolve("info.json");
-                                Path mapsFile = methodDir.resolve("maps.json");
-                                if (!Files.exists(infoFile) || !Files.exists(mapsFile)) continue;
-                                Method method = retrieveSingleMethod(infoFile, mapsFile, commitRepository, versionRepository);
-                                if (method != null) methods.add(method);
-                            }
-                        }
-                    }
-                }
+                processClassDirs(packageDir, methods, commitRepository, versionRepository);
             }
         } catch (IOException e) {
             throw new MethodRetrievalException("Errore durante la lettura della directory dei metodi", e);
         }
         LOGGER.info(() -> "Cache dei metodi letta da filesystem per il progetto: " + selectedProject);
         return methods;
+    }
+
+    private void processClassDirs(Path packageDir, List<Method> methods, CommitRepository commitRepository, VersionRepository versionRepository) throws IOException, MethodRetrievalException {
+        try (DirectoryStream<Path> classDirs = Files.newDirectoryStream(packageDir)) {
+            for (Path classDir : classDirs) {
+                if (!Files.isDirectory(classDir)) continue;
+                processMethodDirs(classDir, methods, commitRepository, versionRepository);
+            }
+        }
+    }
+
+    private void processMethodDirs(Path classDir, List<Method> methods, CommitRepository commitRepository, VersionRepository versionRepository) throws IOException, MethodRetrievalException {
+        try (DirectoryStream<Path> methodDirs = Files.newDirectoryStream(classDir)) {
+            for (Path methodDir : methodDirs) {
+                if (!Files.isDirectory(methodDir)) continue;
+                Path infoFile = methodDir.resolve("info.json");
+                Path mapsFile = methodDir.resolve("maps.json");
+                if (Files.exists(infoFile) && Files.exists(mapsFile)) {
+                    Method method = retrieveSingleMethod(infoFile, mapsFile, commitRepository, versionRepository);
+                    methods.add(method);
+                }
+            }
+        }
     }
 
     private Method retrieveSingleMethod(Path infoFile, Path mapsFile, CommitRepository commitRepository, VersionRepository versionRepository) throws MethodRetrievalException {

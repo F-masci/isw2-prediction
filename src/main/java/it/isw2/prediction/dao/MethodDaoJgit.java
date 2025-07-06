@@ -45,10 +45,8 @@ public class MethodDaoJgit implements MethodDao {
             CommitRepository commitRepository = CommitRepositoryFactory.getInstance().getCommitRepository();
             List<Commit> commits = commitRepository.retrieveCommits();
 
-            // FIXME: per ora prendo solo un piccolo campione di commit
             commits = commits.stream()
                     .sorted(Comparator.comparing(Commit::getDate))
-                    // .limit(15)
                     .toList();
 
             // Apro il repository Git
@@ -82,9 +80,9 @@ public class MethodDaoJgit implements MethodDao {
                     .getVersionRepository()
                     .retrieveLastReleasedVersion();
 
-            methods.values().forEach((method) -> {
+            methods.values().forEach(m -> {
                 // Se il metodo non è stato eliminato, aggiungo la versione corrente come versione del metodo
-                if (method.getDeleteCommit() == null) method.addVersion(lastVersion);
+                if (m.getDeleteCommit() == null) m.addVersion(lastVersion);
             });
         }
 
@@ -101,43 +99,49 @@ public class MethodDaoJgit implements MethodDao {
      */
     private void addMethodsFromCommit(Repository repository, Map<String, Method> methods, Commit commit) throws IOException {
         RevCommit parent = commit.getParent();
-        if (parent == null) return; // Se non c'è parent, non posso confrontare
+        if (parent == null) return;
 
         try (Git git = new Git(repository)) {
-            // Ottiene le modifiche tra il commit attuale e il parent
             List<DiffEntry> diffs = computeDiffs(repository, git, parent, commit);
 
-            for (DiffEntry diff : diffs) {
-                if (isTestOrNonJavaFile(diff)) continue; // Esclude file non-Java o di test
-
-                // Recupera il contenuto del file prima e dopo il commit (se esiste)
-                String oldCode = getCode(repository, diff.getOldId(), diff.getChangeType() != DiffEntry.ChangeType.ADD);
-                String newCode = getCode(repository, diff.getNewId(), diff.getChangeType() != DiffEntry.ChangeType.DELETE);
-                if (diff.getChangeType() != DiffEntry.ChangeType.DELETE && newCode.isEmpty()) continue;
-
-                // Parsing dei sorgenti Java
-                CompilationUnit oldCu = tryParse(diff.getOldPath(), oldCode, true);
-                CompilationUnit newCu = diff.getChangeType() == DiffEntry.ChangeType.DELETE ? null : tryParse(diff.getNewPath(), newCode, false);
-                if (diff.getChangeType() != DiffEntry.ChangeType.DELETE && newCu == null) continue;
-
-                // Recupera il nome del package (da uno dei due CU disponibili)
-                String packageName = extractPackageName(newCu, oldCu);
-                if (packageName == null) continue;
-
-                // Estrae tutti i metodi dichiarati nelle versioni vecchia e nuova del file
-                List<MethodDeclaration> oldMethods = oldCu != null ? oldCu.findAll(MethodDeclaration.class) : new ArrayList<>();
-                List<MethodDeclaration> newMethods = newCu != null ? newCu.findAll(MethodDeclaration.class) : new ArrayList<>();
-
-                // Analizza i metodi eliminati
-                if (diff.getChangeType() == DiffEntry.ChangeType.DELETE) {
-                    processDeletedMethods(oldMethods, methods, packageName, commit, diff, repository);
-                } else {
-                    // Analizza i metodi aggiunti o modificati
-                    processNewOrChangedMethods(newMethods, oldMethods, methods, packageName, commit, diff, repository);
-                }
-            }
+            diffs.stream()
+                    .filter(diff -> !isTestOrNonJavaFile(diff))
+                    .map(diff -> createDiffContext(repository, diff))
+                    .filter(Objects::nonNull)
+                    .forEach(ctx -> processDiffContext(ctx, methods, commit, repository));
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, e, () -> "Errore nell'analisi del commit: " + e.getMessage());
+        }
+    }
+
+    private DiffContext createDiffContext(Repository repository, DiffEntry diff) {
+        try {
+            String oldCode = getCode(repository, diff.getOldId(), diff.getChangeType() != DiffEntry.ChangeType.ADD);
+            String newCode = getCode(repository, diff.getNewId(), diff.getChangeType() != DiffEntry.ChangeType.DELETE);
+
+            if (diff.getChangeType() != DiffEntry.ChangeType.DELETE && newCode.isEmpty()) return null;
+
+            CompilationUnit oldCu = tryParse(diff.getOldPath(), oldCode, true);
+            CompilationUnit newCu = diff.getChangeType() == DiffEntry.ChangeType.DELETE ? null : tryParse(diff.getNewPath(), newCode, false);
+            if (diff.getChangeType() != DiffEntry.ChangeType.DELETE && newCu == null) return null;
+
+            String packageName = extractPackageName(newCu, oldCu);
+            if (packageName == null) return null;
+
+            return new DiffContext(diff, oldCu, newCu, packageName, oldCode, newCode);
+        } catch (Exception _) {
+            return null;
+        }
+    }
+
+    private void processDiffContext(DiffContext ctx, Map<String, Method> methods, Commit commit, Repository repository) {
+        List<MethodDeclaration> oldMethods = ctx.oldCu != null ? ctx.oldCu.findAll(MethodDeclaration.class) : new ArrayList<>();
+        List<MethodDeclaration> newMethods = ctx.newCu != null ? ctx.newCu.findAll(MethodDeclaration.class) : new ArrayList<>();
+
+        if (ctx.diff.getChangeType() == DiffEntry.ChangeType.DELETE) {
+            processDeletedMethods(oldMethods, methods, ctx.packageName, commit, ctx.diff, repository);
+        } else {
+            processNewOrChangedMethods(newMethods, oldMethods, methods, ctx.packageName, commit, ctx.diff, repository);
         }
     }
 
@@ -315,6 +319,26 @@ public class MethodDaoJgit implements MethodDao {
                 method.parseMethodDeclaration(commit, newMethod);
                 method.parseDiffEntry(repo, commit, diff);
             }
+        }
+    }
+
+
+
+    private static class DiffContext {
+        DiffEntry diff;
+        CompilationUnit oldCu;
+        CompilationUnit newCu;
+        String packageName;
+        String oldCode;
+        String newCode;
+
+        DiffContext(DiffEntry diff, CompilationUnit oldCu, CompilationUnit newCu, String packageName, String oldCode, String newCode) {
+            this.diff = diff;
+            this.oldCu = oldCu;
+            this.newCu = newCu;
+            this.packageName = packageName;
+            this.oldCode = oldCode;
+            this.newCode = newCode;
         }
     }
 
