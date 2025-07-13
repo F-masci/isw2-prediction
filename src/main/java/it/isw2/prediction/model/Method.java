@@ -457,16 +457,14 @@ public class Method {
 
             if (inBlockComment) {
                 inBlockComment = !endsBlockComment(trimmed);
-                continue;
-            }
-            if (shouldSkipLine(trimmed)) continue;
-            if (startsBlockComment(trimmed)) {
+            } else if (shouldSkipLine(trimmed)) {
+                // niente
+            } else if (startsBlockComment(trimmed)) {
                 inBlockComment = !endsBlockComment(trimmed);
-                continue;
+            } else if (!isBraceOnly(trimmed)) {
+                count++;
             }
-            if (isBraceOnly(trimmed)) continue;
 
-            count++;
         }
         return count;
     }
@@ -496,11 +494,10 @@ public class Method {
         BlockStmt body = methodDeclaration.getBody().get();
 
         // Contiamo solo gli Statement diretti o annidati reali
-        List<Statement> statements = body.findAll(Statement.class).stream()
+        return body.findAll(Statement.class).stream()
                 .filter(stmt -> !(stmt instanceof BlockStmt)) // Escludi blocchi vuoti
-                .collect(Collectors.toList());
-
-        return statements.size();
+                .toList()
+                .size();
     }
 
     /**
