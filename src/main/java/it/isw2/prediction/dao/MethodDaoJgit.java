@@ -108,7 +108,13 @@ public class MethodDaoJgit implements MethodDao {
                     .filter(diff -> !isTestOrNonJavaFile(diff))
                     .map(diff -> createDiffContext(repository, diff))
                     .filter(Objects::nonNull)
-                    .forEach(ctx -> processDiffContext(ctx, methods, commit, repository));
+                    .forEach(ctx -> {
+                        try {
+                            processDiffContext(ctx, methods, commit, repository);
+                        } catch (TicketRetrievalException e) {
+                            throw new RuntimeException(e);
+                        }
+                    });
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, e, () -> "Errore nell'analisi del commit: " + e.getMessage());
         }
@@ -134,7 +140,7 @@ public class MethodDaoJgit implements MethodDao {
         }
     }
 
-    private void processDiffContext(DiffContext ctx, Map<String, Method> methods, Commit commit, Repository repository) {
+    private void processDiffContext(DiffContext ctx, Map<String, Method> methods, Commit commit, Repository repository) throws TicketRetrievalException {
         List<MethodDeclaration> oldMethods = ctx.oldCu != null ? ctx.oldCu.findAll(MethodDeclaration.class) : new ArrayList<>();
         List<MethodDeclaration> newMethods = ctx.newCu != null ? ctx.newCu.findAll(MethodDeclaration.class) : new ArrayList<>();
 

@@ -65,10 +65,10 @@ public class ApplicationConfig {
     }
 
     public int getValidationFolds() {
-        return Math.max(2, Integer.parseInt(this.get("prediction.validation.crossfold")));
+        return Math.max(2, Integer.parseInt(this.get("prediction.validation.feature.fold")));
     }
-    public int getValidationIterations() {
-        return Math.max(1, Integer.parseInt(this.get("prediction.validation.iterations")));
+    public int getNumberOfVersionInValidationFolds() {
+        return Math.max(1, Integer.parseInt(this.get("prediction.validation.version-in-fold")));
     }
     public List<FeatureSelection> getValidationFeatureSelectionMethos() {
         String value = this.get("prediction.validation.feature.selection.method");

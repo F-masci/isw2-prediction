@@ -2,8 +2,12 @@ package it.isw2.prediction.controller;
 
 import it.isw2.prediction.FeatureSelection;
 import it.isw2.prediction.config.ApplicationConfig;
+import it.isw2.prediction.factory.VersionRepositoryFactory;
+import it.isw2.prediction.model.Version;
+import it.isw2.prediction.repository.VersionRepository;
 import org.apache.commons.math3.stat.correlation.SpearmansCorrelation;
 import weka.attributeSelection.*;
+import weka.classifiers.AbstractClassifier;
 import weka.classifiers.Classifier;
 import weka.classifiers.Evaluation;
 import weka.classifiers.bayes.NaiveBayes;
@@ -20,9 +24,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.nio.file.Paths;
 import java.security.SecureRandom;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -74,6 +76,10 @@ public class PredictionController extends CsvController {
             filter.setInputFormat(originalData);
             originalData = Filter.useFilter(originalData, filter);
 
+            // Ottieni tutte le versioni
+            VersionRepository versionRepository = VersionRepositoryFactory.getInstance().getVersionRepository();
+            List<Version> versions = versionRepository.retrieveVersions().stream().sorted(Comparator.comparing(Version::getReleaseDate)).toList();
+
             printMemoryUsage("Memoria dopo del caricamento del dataset");
 
             for (FeatureSelection featureSelection : featureSelections) {
@@ -119,30 +125,53 @@ public class PredictionController extends CsvController {
 
                     int classIndex = trainData.attribute("Buggy").index();
                     trainData.setClassIndex(classIndex);
-                    Evaluation eval = new Evaluation(trainData);
 
-                    int iterations = config.getValidationIterations();
-                    double precision = 0;
-                    double recall = 0;
-                    double auc = 0;
-                    double kappa = 0;
+                    int versionInFolds = config.getNumberOfVersionInValidationFolds();
 
-                    SecureRandom random = new SecureRandom();
-                    random.setSeed(config.getRandomSeed());
+                    List<Double> precisions = new ArrayList<>();
+                    List<Double> recalls = new ArrayList<>();
+                    List<Double> aucs = new ArrayList<>();
+                    List<Double> kappas = new ArrayList<>();
 
-                    for (int i = 0; i < iterations; i++) {
-                        printMemoryUsage("Memoria evaluation iterazione " + (i + 1));
-                        eval.crossValidateModel(model, trainData, config.getValidationFolds(), random);
-                        precision += eval.weightedPrecision();
-                        recall += eval.weightedRecall();
-                        auc += eval.weightedAreaUnderROC();
-                        kappa += eval.kappa();
+                    for (int i = versionInFolds; i < versions.size(); i++) {
+                        List<Version> trainVersions = versions.subList(0, i);
+                        List<Version> testVersions = versions.subList(i, Math.min(i + versionInFolds, versions.size()));
+
+                        Instances trainSet = new Instances(trainData, 0);
+                        Instances testSet = new Instances(trainData, 0);
+
+                        for (int j = 0; j < trainData.numInstances(); j++) {
+                            String versionName = originalData.instance(j).stringValue(originalData.attribute("Version"));
+                            Version version = versionRepository.retrieveVersionByName(versionName);
+
+                            if (trainVersions.contains(version)) trainSet.add(trainData.instance(j));
+                            else if (testVersions.contains(version)) testSet.add(trainData.instance(j));
+                        }
+
+                        if (trainSet.numInstances() == 0 || testSet.numInstances() == 0) {
+                            LOGGER.log(Level.WARNING, "Nessuna istanza disponibile per il training o il test nel fold che termina con versione {0}.", versions.get(i).getName());
+                            continue;
+                        }
+
+                        trainSet.setClassIndex(classIndex);
+                        testSet.setClassIndex(classIndex);
+
+                        Classifier modelCopy = AbstractClassifier.makeCopy(model);
+                        modelCopy.buildClassifier(trainSet);
+
+                        Evaluation eval = new Evaluation(trainSet);
+                        eval.evaluateModel(modelCopy, testSet);
+
+                        precisions.add(eval.precision(1));
+                        recalls.add(eval.recall(1));
+                        aucs.add(eval.areaUnderROC(1));
+                        kappas.add(eval.kappa());
                     }
 
-                    precision = precision / iterations;
-                    recall = recall / iterations;
-                    auc = auc / iterations;
-                    kappa = kappa / iterations;
+                    double precision = precisions.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+                    double recall = recalls.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+                    double auc = aucs.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+                    double kappa = kappas.stream().mapToDouble(Double::doubleValue).average().orElse(0);
 
                     String message = format(
                             "{0} - Precision: {1}, Recall: {2}, AUC: {3}, Kappa: {4}",

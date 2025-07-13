@@ -128,4 +128,16 @@ public class Version {
         return name.hashCode();
     }
 
+    public boolean before(Version version) {
+        if (version == null) return false;
+        if (this.releaseDate == null || version.getReleaseDate() == null) return false;
+        return this.releaseDate.before(version.getReleaseDate());
+    }
+
+    public boolean after(Version version) {
+        if (version == null) return false;
+        if (this.releaseDate == null || version.getReleaseDate() == null) return false;
+        return this.releaseDate.after(version.getReleaseDate());
+    }
+
 }
