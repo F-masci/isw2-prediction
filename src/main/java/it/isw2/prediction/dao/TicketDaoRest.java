@@ -31,61 +31,32 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
 
     @Override
     public List<Ticket> retrieveTickets() throws TicketRetrievalException {
-
         List<Ticket> tickets = new ArrayList<>();
-
         int startAt = 0;
         int maxResults = 1000;
-        int results = 0;
         int expectedTotal = -1;
 
         try {
+            ApplicationConfig config = new ApplicationConfig();
+            Project project = config.getSelectedProject();
+
             do {
-
-                // Recupero del progetto
-                ApplicationConfig config = new ApplicationConfig();
-                Project project = config.getSelectedProject();
-
-                LOGGER.log(Level.FINE, () -> "Retrieving tickets of " + project.getKey());
-
-                // Costruzione della query JQL
-                String jql = "project=" + project.getId() + " AND issueType = 'Bug' AND (status = 'closed' OR status = 'resolved') AND resolution = 'fixed' ORDER BY created ASC";
-                String encodedJql = URLEncoder.encode(jql, StandardCharsets.UTF_8);
-
-                // Costruzione dell'endpoint
-                String fields = "key,resolutiondate,versions,fixVersions,created,updated";
-                String endpoint = String.format("%s/search?jql=%s&fields=%s&startAt=%s", JiraApiConfig.getBaseUrl(), encodedJql, fields, startAt);
-
-                // Aggiunta dei parametri di paginazione
-                if(maxResults > 0) endpoint += "&maxResults=" + maxResults;
-
+                String endpoint = buildJiraEndpoint(project, startAt, maxResults);
                 LOGGER.log(Level.FINE, "Endpoint: {0}", endpoint);
 
-                // Esecuzione della richiesta GET
                 HttpResponse<String> response = executeGetRequest(endpoint);
-
-                // Parsing della risposta JSON
                 JsonNode rootNode = OBJECT_MAPPER.readTree(response.body());
-                if(expectedTotal < 0) {
+
+                if (expectedTotal < 0) {
                     expectedTotal = rootNode.get("total").asInt();
                     TicketBuilder.setExpectedTotal(expectedTotal);
                 }
-                JsonNode issues = rootNode.get("issues");
 
-                // Controllo se issues è un array e parsing dei ticket
-                if (issues.isArray()) {
-                    // Itera su ogni ticket
-                    for (JsonNode issue : issues) {
-                        // Parsing del ticket
-                        Ticket ticket = parseTicket(issue);
-                        if(ticket == null) continue;
-                        tickets.add(ticket);
-                        results++;
-                    }
-                }
+                int parsed = parseAndAddTickets(rootNode, tickets);
+                if (parsed == 0) break;
 
-                startAt += results;
-            } while(results == maxResults);
+                startAt += parsed;
+            } while (tickets.size() % maxResults == 0);
 
         } catch (RetrievalException e) {
             throw new TicketRetrievalException("Errore durante il recupero dei ticket", e);
@@ -94,7 +65,30 @@ public class TicketDaoRest extends DaoRest implements TicketDao {
         }
 
         return tickets;
+    }
 
+    private String buildJiraEndpoint(Project project, int startAt, int maxResults) {
+        String jql = "project=" + project.getId() + " AND issueType = 'Bug' AND (status = 'closed' OR status = 'resolved') AND resolution = 'fixed' ORDER BY created ASC";
+        String encodedJql = URLEncoder.encode(jql, StandardCharsets.UTF_8);
+        String fields = "key,resolutiondate,versions,fixVersions,created,updated";
+        String endpoint = String.format("%s/search?jql=%s&fields=%s&startAt=%s", JiraApiConfig.getBaseUrl(), encodedJql, fields, startAt);
+        if (maxResults > 0) endpoint += "&maxResults=" + maxResults;
+        return endpoint;
+    }
+
+    private int parseAndAddTickets(JsonNode rootNode, List<Ticket> tickets) {
+        JsonNode issues = rootNode.get("issues");
+        int count = 0;
+        if (issues != null && issues.isArray()) {
+            for (JsonNode issue : issues) {
+                Ticket ticket = parseTicket(issue);
+                if (ticket != null) {
+                    tickets.add(ticket);
+                    count++;
+                }
+            }
+        }
+        return count;
     }
 
     /**

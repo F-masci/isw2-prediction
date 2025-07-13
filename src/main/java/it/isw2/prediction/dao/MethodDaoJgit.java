@@ -112,7 +112,7 @@ public class MethodDaoJgit implements MethodDao {
                         try {
                             processDiffContext(ctx, methods, commit, repository);
                         } catch (TicketRetrievalException e) {
-                            throw new RuntimeException(e);
+                            LOGGER.log(Level.SEVERE, e, () -> "Errore nel recupero del ticket per il commit: " + commit.getId());
                         }
                     });
         } catch (Exception e) {

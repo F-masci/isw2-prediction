@@ -399,7 +399,8 @@ public class Method {
     }
 
     private double getAvgForVersion(Map<Commit, Integer> metricMap, Version version) {
-        int sum = 0, count = 0;
+        int sum = 0;
+        int count = 0;
         for (Map.Entry<Commit, Integer> entry : metricMap.entrySet()) {
             if (entry.getKey().getVersion().equals(version)) {
                 sum += entry.getValue();
@@ -440,14 +441,6 @@ public class Method {
     }
 
     /**
-     * Calcola le linee di codice complete (LOC) per il metodo.
-     * Include tutte le linee tra l'inizio e la fine del metodo, indipendentemente da commenti o spazi vuoti.
-     */
-    private int computeCompleteLOC(MethodDeclaration methodDeclaration) {
-        return methodDeclaration.getEnd().get().line - methodDeclaration.getBegin().get().line;
-    }
-
-    /**
      * Calcola le linee di codice "pure" (LOC) per il metodo.
      * Esclude commenti e spazi vuoti, ma include le linee di codice effettivo.
      */
@@ -455,7 +448,7 @@ public class Method {
         if (methodDeclaration.getBody().isEmpty()) return 0;
 
         BlockStmt body = methodDeclaration.getBody().get();
-        String[] lines = body.toString().split("\\R"); // supporta \n e \r\n
+        String[] lines = body.toString().split("\\R");
         int count = 0;
         boolean inBlockComment = false;
 
@@ -463,28 +456,35 @@ public class Method {
             String trimmed = line.trim();
 
             if (inBlockComment) {
-                if (trimmed.contains("*/")) inBlockComment = false;
+                inBlockComment = !endsBlockComment(trimmed);
                 continue;
             }
-
-            if (trimmed.isEmpty()
-                    || trimmed.startsWith("//")
-                    || trimmed.startsWith("*")) {
+            if (shouldSkipLine(trimmed)) continue;
+            if (startsBlockComment(trimmed)) {
+                inBlockComment = !endsBlockComment(trimmed);
                 continue;
             }
-
-            if (trimmed.startsWith("/*")) {
-                if (!trimmed.contains("*/")) inBlockComment = true;
-                continue;
-            }
-
-            // Salta le righe che contengono solo una parentesi graffa
-            if (trimmed.equals("{") || trimmed.equals("}")) continue;
+            if (isBraceOnly(trimmed)) continue;
 
             count++;
         }
-
         return count;
+    }
+
+    private boolean shouldSkipLine(String trimmed) {
+        return trimmed.isEmpty() || trimmed.startsWith("//") || trimmed.startsWith("*");
+    }
+
+    private boolean startsBlockComment(String trimmed) {
+        return trimmed.startsWith("/*");
+    }
+
+    private boolean endsBlockComment(String trimmed) {
+        return trimmed.contains("*/");
+    }
+
+    private boolean isBraceOnly(String trimmed) {
+        return trimmed.equals("{") || trimmed.equals("}");
     }
 
     /**
@@ -558,12 +558,11 @@ public class Method {
                 localAdd = 1 + nesting;
                 complexity += localAdd;
                 complexity = computeCognitiveComplexity(child, nesting + 1, complexity);
-            } else if (child instanceof BinaryExpr) {
-                BinaryExpr be = (BinaryExpr) child;
+            } else if (child instanceof BinaryExpr be) {
                 if (be.getOperator() == BinaryExpr.Operator.AND || be.getOperator() == BinaryExpr.Operator.OR) {
                     complexity += 1;
                 }
-                complexity = computeCognitiveComplexity(child, nesting, complexity);
+                complexity = computeCognitiveComplexity(be, nesting, complexity);
             } else {
                 complexity = computeCognitiveComplexity(child, nesting, complexity);
             }
@@ -651,21 +650,6 @@ public class Method {
      */
     private int computeParametersCount(MethodDeclaration methodDeclaration) {
         return methodDeclaration.getParameters().size();
-    }
-
-    /**
-     * Conta le occorrenze di un'espressione regolare in un testo.
-     *
-     * @param text  Il testo in cui cercare
-     * @param regex L'espressione regolare da cercare
-     * @return Il numero di occorrenze trovate
-     */
-    private int countRegex(String text, String regex) {
-        java.util.regex.Pattern p = java.util.regex.Pattern.compile(regex);
-        java.util.regex.Matcher m = p.matcher(text);
-        int count = 0;
-        while (m.find()) count++;
-        return count;
     }
 
 

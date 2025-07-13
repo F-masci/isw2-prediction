@@ -23,7 +23,6 @@ import weka.filters.unsupervised.attribute.StringToNominal;
 import java.io.File;
 import java.io.FileWriter;
 import java.nio.file.Paths;
-import java.security.SecureRandom;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -34,6 +33,9 @@ public class PredictionController extends CsvController {
 
     private static final Logger LOGGER = Logger.getLogger(PredictionController.class.getName());
     private static final String SEPARATOR = ";";
+    private static final String ATTRIBUTE_RANGE = "first-last";
+    private static final String BUGGY_ATTRIBUTE = "Buggy";
+    private static final String VERSION_ATTRIBUTE = "Version";
 
     private final ApplicationConfig config = new ApplicationConfig();
     private final String projectName = config.getSelectedProject().getKey();
@@ -54,7 +56,6 @@ public class PredictionController extends CsvController {
 
     public void evaluateModels() throws Exception {
         try {
-
             List<FeatureSelection> featureSelections = config.getValidationFeatureSelectionMethos();
             if (featureSelections.isEmpty()) {
                 LOGGER.log(Level.WARNING, "Nessuna feature selection configurata.");
@@ -66,127 +67,55 @@ public class PredictionController extends CsvController {
 
             printMemoryUsage("Memoria prima del caricamento del dataset");
 
-            // Carica il dataset originale UNA SOLA VOLTA per tutti i modelli/feature selection
             CSVLoader loader = new CSVLoader();
             loader.setSource(new File(filteredDatasetPath));
             loader.setFieldSeparator(SEPARATOR);
             Instances originalData = loader.getDataSet();
             StringToNominal filter = new StringToNominal();
-            filter.setAttributeRange("first-last");
+            filter.setAttributeRange(ATTRIBUTE_RANGE);
             filter.setInputFormat(originalData);
             originalData = Filter.useFilter(originalData, filter);
 
-            // Ottieni tutte le versioni
             VersionRepository versionRepository = VersionRepositoryFactory.getInstance().getVersionRepository();
             List<Version> versions = versionRepository.retrieveVersions().stream().sorted(Comparator.comparing(Version::getReleaseDate)).toList();
 
             printMemoryUsage("Memoria dopo del caricamento del dataset");
 
+            Classifier[] models = { new RandomForest(), new NaiveBayes(), new IBk() };
+            String[] modelNames = { "RandomForest", "NaiveBayes", "IBk" };
+
             for (FeatureSelection featureSelection : featureSelections) {
-
-                Instances infoGainData = null;
-                if (featureSelection == FeatureSelection.INFO_GAIN) {
-                    infoGainData = selectFeaturesWithInfoGainRanker(originalData);
-                }
-
-                Classifier[] models = new Classifier[]{
-                        new RandomForest(),
-                        new NaiveBayes(),
-                        new IBk()
-                };
-                String[] modelNames = {
-                        "RandomForest",
-                        "NaiveBayes",
-                        "IBk"
-                };
+                Instances baseData = featureSelection == FeatureSelection.INFO_GAIN
+                        ? selectFeaturesWithInfoGainRanker(originalData)
+                        : new Instances(originalData);
 
                 for (int m = 0; m < models.length; m++) {
                     Classifier model = models[m];
                     String modelName = modelNames[m];
-                    Instances trainData = featureSelection == FeatureSelection.INFO_GAIN ? new Instances(infoGainData) : new Instances(originalData);
-
-                    LOGGER.log(Level.INFO, "Selezione feature con {0}", featureSelection.getName());
-
-                    switch (featureSelection) {
-                        case FeatureSelection.FORWARD, FeatureSelection.BACKWARD:
-                            trainData = selectFeaturesWithSearchWrapper(trainData, model, featureSelection);
-                            break;
-                        case FeatureSelection.INFO_GAIN:
-                            // Già calcolato sopra
-                            break;
-                        case FeatureSelection.NONE:
-                            break;
-                        default:
-                            LOGGER.log(Level.WARNING, () -> "Feature selection non supportata: " + featureSelection);
-                    }
+                    Instances trainData = applyFeatureSelection(baseData, model, featureSelection);
 
                     printMemoryUsage("Memoria dopo feature selection " + featureSelection.getName());
                     LOGGER.log(Level.INFO, "Addestramento modello {0} con {1} feature", new Object[]{modelName, trainData.numAttributes() - 1});
 
-                    int classIndex = trainData.attribute("Buggy").index();
+                    int classIndex = trainData.attribute(BUGGY_ATTRIBUTE).index();
                     trainData.setClassIndex(classIndex);
 
-                    int versionInFolds = config.getNumberOfVersionInValidationFolds();
-
-                    List<Double> precisions = new ArrayList<>();
-                    List<Double> recalls = new ArrayList<>();
-                    List<Double> aucs = new ArrayList<>();
-                    List<Double> kappas = new ArrayList<>();
-
-                    for (int i = versionInFolds; i < versions.size(); i++) {
-                        List<Version> trainVersions = versions.subList(0, i);
-                        List<Version> testVersions = versions.subList(i, Math.min(i + versionInFolds, versions.size()));
-
-                        Instances trainSet = new Instances(trainData, 0);
-                        Instances testSet = new Instances(trainData, 0);
-
-                        for (int j = 0; j < trainData.numInstances(); j++) {
-                            String versionName = originalData.instance(j).stringValue(originalData.attribute("Version"));
-                            Version version = versionRepository.retrieveVersionByName(versionName);
-
-                            if (trainVersions.contains(version)) trainSet.add(trainData.instance(j));
-                            else if (testVersions.contains(version)) testSet.add(trainData.instance(j));
-                        }
-
-                        if (trainSet.numInstances() == 0 || testSet.numInstances() == 0) {
-                            LOGGER.log(Level.WARNING, "Nessuna istanza disponibile per il training o il test nel fold che termina con versione {0}.", versions.get(i).getName());
-                            continue;
-                        }
-
-                        trainSet.setClassIndex(classIndex);
-                        testSet.setClassIndex(classIndex);
-
-                        Classifier modelCopy = AbstractClassifier.makeCopy(model);
-                        modelCopy.buildClassifier(trainSet);
-
-                        Evaluation eval = new Evaluation(trainSet);
-                        eval.evaluateModel(modelCopy, testSet);
-
-                        precisions.add(eval.precision(1));
-                        recalls.add(eval.recall(1));
-                        aucs.add(eval.areaUnderROC(1));
-                        kappas.add(eval.kappa());
-                    }
-
-                    double precision = precisions.stream().mapToDouble(Double::doubleValue).average().orElse(0);
-                    double recall = recalls.stream().mapToDouble(Double::doubleValue).average().orElse(0);
-                    double auc = aucs.stream().mapToDouble(Double::doubleValue).average().orElse(0);
-                    double kappa = kappas.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+                    ModelMetrics metrics = evaluateModelOnVersions(trainData, originalData, model, versions, versionRepository, classIndex);
 
                     String message = format(
                             "{0} - Precision: {1}, Recall: {2}, AUC: {3}, Kappa: {4}",
-                            modelName, precision, recall, auc, kappa
+                            modelName, metrics.precision, metrics.recall, metrics.auc, metrics.kappa
                     );
                     LOGGER.log(Level.INFO, message);
 
                     String line = String.join(SEPARATOR,
                             modelName,
                             featureSelection.getName(),
-                            String.valueOf(trainData.numAttributes()-1),
-                            String.valueOf(precision),
-                            String.valueOf(recall),
-                            String.valueOf(auc),
-                            String.valueOf(kappa)
+                            String.valueOf(trainData.numAttributes() - 1),
+                            String.valueOf(metrics.precision),
+                            String.valueOf(metrics.recall),
+                            String.valueOf(metrics.auc),
+                            String.valueOf(metrics.kappa)
                     );
                     lines.add(line);
 
@@ -201,6 +130,75 @@ public class PredictionController extends CsvController {
             LOGGER.log(Level.SEVERE, "Errore durante la predizione del dataset", e);
             System.exit(1);
         }
+    }
+
+    private Instances applyFeatureSelection(Instances data, Classifier model, FeatureSelection featureSelection) throws Exception {
+        switch (featureSelection) {
+            case FORWARD, BACKWARD:
+                return selectFeaturesWithSearchWrapper(data, model, featureSelection);
+            case INFO_GAIN, NONE:
+                return data;
+            default:
+                LOGGER.log(Level.WARNING, () -> "Feature selection non supportata: " + featureSelection);
+                return data;
+        }
+    }
+
+    private ModelMetrics evaluateModelOnVersions(
+            Instances trainData,
+            Instances originalData,
+            Classifier model,
+            List<Version> versions,
+            VersionRepository versionRepository,
+            int classIndex
+    ) throws Exception {
+        int versionInFolds = config.getNumberOfVersionInValidationFolds();
+        List<Double> precisions = new ArrayList<>();
+        List<Double> recalls = new ArrayList<>();
+        List<Double> aucs = new ArrayList<>();
+        List<Double> kappas = new ArrayList<>();
+
+        for (int i = versionInFolds; i < versions.size(); i++) {
+            List<Version> trainVersions = versions.subList(0, i);
+            List<Version> testVersions = versions.subList(i, Math.min(i + versionInFolds, versions.size()));
+
+            Instances trainSet = new Instances(trainData, 0);
+            Instances testSet = new Instances(trainData, 0);
+
+            for (int j = 0; j < trainData.numInstances(); j++) {
+                String versionName = originalData.instance(j).stringValue(originalData.attribute(VERSION_ATTRIBUTE));
+                Version version = versionRepository.retrieveVersionByName(versionName);
+
+                if (trainVersions.contains(version)) trainSet.add(trainData.instance(j));
+                else if (testVersions.contains(version)) testSet.add(trainData.instance(j));
+            }
+
+            if (trainSet.numInstances() == 0 || testSet.numInstances() == 0) {
+                LOGGER.log(Level.WARNING, "Nessuna istanza disponibile per il training o il test nel fold che termina con versione {0}.", versions.get(i).getName());
+                continue;
+            }
+
+            trainSet.setClassIndex(classIndex);
+            testSet.setClassIndex(classIndex);
+
+            Classifier modelCopy = AbstractClassifier.makeCopy(model);
+            modelCopy.buildClassifier(trainSet);
+
+            Evaluation eval = new Evaluation(trainSet);
+            eval.evaluateModel(modelCopy, testSet);
+
+            precisions.add(eval.precision(1));
+            recalls.add(eval.recall(1));
+            aucs.add(eval.areaUnderROC(1));
+            kappas.add(eval.kappa());
+        }
+
+        return new ModelMetrics(
+                precisions.stream().mapToDouble(Double::doubleValue).average().orElse(0),
+                recalls.stream().mapToDouble(Double::doubleValue).average().orElse(0),
+                aucs.stream().mapToDouble(Double::doubleValue).average().orElse(0),
+                kappas.stream().mapToDouble(Double::doubleValue).average().orElse(0)
+        );
     }
 
     public void runPrediction() throws Exception {
@@ -223,7 +221,7 @@ public class PredictionController extends CsvController {
 
             // Converte stringhe in nominali (es: Project, Package, Class, Method, Version, Buggy)
             StringToNominal filter = new StringToNominal();
-            filter.setAttributeRange("first-last");
+            filter.setAttributeRange(ATTRIBUTE_RANGE);
             filter.setInputFormat(data);
             data = Filter.useFilter(data, filter);
 
@@ -249,7 +247,7 @@ public class PredictionController extends CsvController {
             int actionableIdx = reducedData.attribute(actionableFeature).index();
 
             // Imposta la colonna 'Buggy' come target
-            int classIndex = reducedData.attribute("Buggy").index();
+            int classIndex = reducedData.attribute(BUGGY_ATTRIBUTE).index();
             reducedData.setClassIndex(classIndex);
             model.buildClassifier(reducedData);
 
@@ -302,14 +300,14 @@ public class PredictionController extends CsvController {
 
         LOGGER.log(Level.INFO, "Predizione su {0} istanze ({1})", new Object[]{reducedData.numInstances(), suffix});
 
-        String header = String.join(SEPARATOR, "Project", "Package", "Class", "Method", "Version", "Actual", "Predicted");
+        String header = String.join(SEPARATOR, "Project", "Package", "Class", "Method", VERSION_ATTRIBUTE, "Actual", "Predicted");
         List<String> lines = new ArrayList<>();
 
         int projectIdx = originalData.attribute("Project").index();
         int packageIdx = originalData.attribute("Package").index();
         int classIdx = originalData.attribute("Class").index();
         int methodIdx = originalData.attribute("Method").index();
-        int versionIdx = originalData.attribute("Version").index();
+        int versionIdx = originalData.attribute(VERSION_ATTRIBUTE).index();
 
         for (int i = 0; i < reducedData.numInstances(); i++) {
             LOGGER.log(Level.INFO, "Predizione istanza {0}/{1}", new Object[]{i + 1, reducedData.numInstances()});
@@ -453,12 +451,12 @@ public class PredictionController extends CsvController {
 
         // Converte stringhe in nominali
         StringToNominal filter = new StringToNominal();
-        filter.setAttributeRange("first-last");
+        filter.setAttributeRange(ATTRIBUTE_RANGE);
         filter.setInputFormat(data);
         data = Filter.useFilter(data, filter);
 
-        // Imposta la classe "Buggy" come target
-        int classIndex = data.attribute("Buggy").index();
+        // Imposta la classe BUGGY_ATTRIBUTE come target
+        int classIndex = data.attribute(BUGGY_ATTRIBUTE).index();
         data.setClassIndex(classIndex);
 
         // Pearson con Weka
@@ -500,4 +498,21 @@ public class PredictionController extends CsvController {
         long maxMemory = Runtime.getRuntime().maxMemory() / (1024 * 1024);
         LOGGER.log(Level.INFO, "{0} - Free: {1} MB, Total: {2} MB, Max: {3} MB", new Object[]{message, freeMemory, totalMemory, maxMemory});
     }
+
+    // Classe di supporto per le metriche
+    private static class ModelMetrics {
+
+        final double precision;
+        final double recall;
+        final double auc;
+        final double kappa;
+
+        ModelMetrics(double precision, double recall, double auc, double kappa) {
+            this.precision = precision;
+            this.recall = recall;
+            this.auc = auc;
+            this.kappa = kappa;
+        }
+    }
+
 }
