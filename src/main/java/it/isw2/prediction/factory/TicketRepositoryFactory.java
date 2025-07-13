@@ -10,7 +10,7 @@ import it.isw2.prediction.repository.TicketRepositoryImpl;
  */
 public class TicketRepositoryFactory {
 
-    private static TicketRepositoryFactory instance;
+    private static TicketRepositoryFactory instance = null;
 
     private final TicketRepository cachedRepository;
 

@@ -6,7 +6,7 @@ import it.isw2.prediction.repository.MethodRepositoryImpl;
 
 public class MethodRepositoryFactory {
 
-    private static MethodRepositoryFactory instance;
+    private static MethodRepositoryFactory instance = null;
 
     private final MethodRepository cachedRepository;
 

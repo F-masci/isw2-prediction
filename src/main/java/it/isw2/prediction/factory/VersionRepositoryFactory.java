@@ -10,7 +10,7 @@ import it.isw2.prediction.repository.VersionRepositoryImpl;
  */
 public class VersionRepositoryFactory {
 
-    private static VersionRepositoryFactory instance;
+    private static VersionRepositoryFactory instance = null;
 
     private final VersionRepository cachedRepository;
 

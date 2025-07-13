@@ -6,7 +6,7 @@ import it.isw2.prediction.repository.CommitRepositoryImpl;
 
 public class CommitRepositoryFactory {
 
-    private static CommitRepositoryFactory instance;
+    private static CommitRepositoryFactory instance = null;
 
     private final CommitRepository cachedRepository;
 
