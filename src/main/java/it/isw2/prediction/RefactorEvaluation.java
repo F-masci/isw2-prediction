@@ -1,22 +1,10 @@
 package it.isw2.prediction;
 
 import it.isw2.prediction.config.ApplicationConfig;
-import it.isw2.prediction.config.GitApiConfig;
-import it.isw2.prediction.controller.DatasetController;
 import it.isw2.prediction.dao.MethodDaoJgit;
-import it.isw2.prediction.factory.CommitFactory;
-import it.isw2.prediction.model.Commit;
 import it.isw2.prediction.model.Method;
 import it.isw2.prediction.model.Version;
-import org.eclipse.jgit.api.Git;
-import org.eclipse.jgit.api.errors.GitAPIException;
-import org.eclipse.jgit.lib.Repository;
-import org.eclipse.jgit.revwalk.RevCommit;
-import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;

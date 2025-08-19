@@ -62,7 +62,6 @@ public class PredictionController extends CsvController {
                 featureSelections.add(FeatureSelection.NONE);
             }
 
-            String header = String.join(SEPARATOR, "Model", "Feature Selection", "Features Number", "Precision", "Recall", "AUC", "Kappa");
             List<String> lines = new ArrayList<>();
 
             printMemoryUsage("Memoria prima del caricamento del dataset");
@@ -141,7 +140,7 @@ public class PredictionController extends CsvController {
                 }
             }
 
-            header = String.join(SEPARATOR,
+            String header = String.join(SEPARATOR,
                     "Model",
                     "Feature Selection",
                     "Features Number",
@@ -220,7 +219,7 @@ public class PredictionController extends CsvController {
             eval.evaluateModel(modelCopy, testSet);
 
             // Calcolo NPofB20 sul test set
-            double npofb20 = computeNPofBN(0.20f, modelCopy, testSet, classIndex);
+            double npofb20 = computeNPofBN(0.20f, modelCopy, testSet);
 
             foldMetricsList.add(new FoldMetrics(
                     i, // fold index
@@ -241,7 +240,7 @@ public class PredictionController extends CsvController {
         return new ModelMetrics(foldMetricsList);
     }
 
-    private double computeNPofBN(double topFraction, Classifier cls, Instances data, int classIndex) throws Exception {
+    private double computeNPofBN(double topFraction, Classifier cls, Instances data) throws Exception {
         List<double[]> scored = new ArrayList<>();
         for (int i = 0; i < data.numInstances(); i++) {
             double[] dist = cls.distributionForInstance(data.instance(i));
