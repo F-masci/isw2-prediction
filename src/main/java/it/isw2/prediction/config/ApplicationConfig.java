@@ -32,6 +32,7 @@ public class ApplicationConfig {
     public Project getSelectedProject() {
         return Project.getByKey(this.get("project"));
     }
+    public String getLastReleasedVersionName() { return this.get("version.last-released"); }
 
     public String getDatasetPath() {
         return this.get("dataset.path");

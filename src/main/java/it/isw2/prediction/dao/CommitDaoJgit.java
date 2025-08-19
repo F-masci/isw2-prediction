@@ -61,4 +61,40 @@ public class CommitDaoJgit implements CommitDao {
 
         return commits;
     }
+
+    @Override
+    public Commit retriveLastCommitOfBranch(String branchName) {
+        try {
+            // Apro il repository Git
+            ApplicationConfig appConfig = new ApplicationConfig();
+            String repoPath = GitApiConfig.getProjectsPath(appConfig.getSelectedProject());
+            FileRepositoryBuilder builder = new FileRepositoryBuilder();
+            File gitDir = new File(repoPath + "/.git");
+
+            try (Repository repository = builder.setGitDir(gitDir)
+                    .readEnvironment()
+                    .findGitDir()
+                    .build();
+                 Git git = new Git(repository)) {
+
+                // Recupero solo i commit sul branch master
+                Iterable<RevCommit> revCommits = git.log()
+                        .add(repository.resolve(branchName))
+                        .call();
+
+                CommitFactory commitFactory = CommitFactory.getInstance();
+
+                // Converto i RevCommit in oggetti Commit
+                return commitFactory.createCommit(revCommits.iterator().next());
+
+            }
+
+        } catch (IOException e) {
+            LOGGER.log(Level.SEVERE, "Errore nell'apertura del repository Git", e);
+        } catch (GitAPIException e) {
+            LOGGER.log(Level.SEVERE, "Errore nell'esecuzione del comando Git", e);
+        }
+        return null;
+    }
+
 }

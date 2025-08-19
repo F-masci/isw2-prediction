@@ -37,13 +37,20 @@ public class MethodDaoJgit implements MethodDao {
 
     @Override
     public List<Method> retrieveMethods() {
+        return retrieveMethods(false);
+    }
+
+    public List<Method> retrieveMethods(boolean onlyLastCommit) {
         HashMap<String, Method> methods = new HashMap<>();
 
         try {
 
             // Recupero l'ultimo commit per ogni versione
             CommitRepository commitRepository = CommitRepositoryFactory.getInstance().getCommitRepository();
-            List<Commit> commits = commitRepository.retrieveCommits();
+            List<Commit> commits = new ArrayList<>();
+            if(!onlyLastCommit) commits = commitRepository.retrieveCommits();
+            else commits = Collections.singletonList(commitRepository.retriveLastCommitOfBranch("HEAD"));
+
 
             commits = commits.stream()
                     .sorted(Comparator.comparing(Commit::getDate))

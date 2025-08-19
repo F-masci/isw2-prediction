@@ -102,27 +102,62 @@ public class PredictionController extends CsvController {
 
                     ModelMetrics metrics = evaluateModelOnVersions(trainData, originalData, model, versions, versionRepository, classIndex);
 
-                    String message = format(
-                            "{0} - Precision: {1}, Recall: {2}, AUC: {3}, Kappa: {4}",
-                            modelName, metrics.precision, metrics.recall, metrics.auc, metrics.kappa
-                    );
-                    LOGGER.log(Level.INFO, message);
+                    for (FoldMetrics fold : metrics.foldMetrics()) {
+                        String message = format(
+                                "{0} - FeatureSelection: {1}, Features: {2}, Fold: {3}, Precision: {4}, Recall: {5}, AUC: {6}, Kappa: {7}",
+                                modelName,
+                                featureSelection.getName(),
+                                trainData.numAttributes() - 1,
+                                fold.foldIndex(),
+                                fold.precision(),
+                                fold.recall(),
+                                fold.auc(),
+                                fold.kappa()
+                        );
+                        LOGGER.log(Level.INFO, message);
 
-                    String line = String.join(SEPARATOR,
-                            modelName,
-                            featureSelection.getName(),
-                            String.valueOf(trainData.numAttributes() - 1),
-                            String.valueOf(metrics.precision),
-                            String.valueOf(metrics.recall),
-                            String.valueOf(metrics.auc),
-                            String.valueOf(metrics.kappa)
-                    );
-                    lines.add(line);
+                        // Costruzione della riga con tutte le metriche
+                        String line = String.join(SEPARATOR,
+                                modelName,
+                                featureSelection.getName(),
+                                String.valueOf(trainData.numAttributes() - 1),
+                                String.valueOf(fold.foldIndex()),
+                                String.valueOf(fold.precision()),
+                                String.valueOf(fold.recall()),
+                                String.valueOf(fold.fMeasure()),
+                                String.valueOf(fold.auc()),
+                                String.valueOf(fold.kappa()),
+                                String.valueOf(fold.accuracy()),
+                                String.valueOf(fold.truePositiveRate()),
+                                String.valueOf(fold.falsePositiveRate()),
+                                String.valueOf(fold.trueNegativeRate()),
+                                String.valueOf(fold.falseNegativeRate()),
+                                String.valueOf(fold.npofb20())
+                        );
+                        lines.add(line);
+                    }
 
                     printMemoryUsage("Memoria dopo evaluation");
                 }
             }
 
+            header = String.join(SEPARATOR,
+                    "Model",
+                    "Feature Selection",
+                    "Features Number",
+                    "Fold",
+                    "Precision",
+                    "Recall",
+                    "F1-score",
+                    "Area Under ROC (AUC)",
+                    "Kappa",
+                    "Accuracy",
+                    "True Positive Rate (TPR)",
+                    "False Positive Rate (FPR)",
+                    "True Negative Rate (TNR)",
+                    "False Negative Rate (FNR)",
+                    "NPofB20"
+            );
             String metricsCsvPath = Paths.get(outputDir, projectName + "_metrics.csv").toString();
             writeCsvFile(metricsCsvPath, header, lines);
 
@@ -153,10 +188,7 @@ public class PredictionController extends CsvController {
             int classIndex
     ) throws Exception {
         int versionInFolds = config.getNumberOfVersionInValidationFolds();
-        List<Double> precisions = new ArrayList<>();
-        List<Double> recalls = new ArrayList<>();
-        List<Double> aucs = new ArrayList<>();
-        List<Double> kappas = new ArrayList<>();
+        List<FoldMetrics> foldMetricsList = new ArrayList<>();
 
         for (int i = versionInFolds; i < versions.size(); i++) {
             List<Version> trainVersions = versions.subList(0, i);
@@ -187,18 +219,57 @@ public class PredictionController extends CsvController {
             Evaluation eval = new Evaluation(trainSet);
             eval.evaluateModel(modelCopy, testSet);
 
-            precisions.add(eval.precision(1));
-            recalls.add(eval.recall(1));
-            aucs.add(eval.areaUnderROC(1));
-            kappas.add(eval.kappa());
+            // Calcolo NPofB20 sul test set
+            double npofb20 = computeNPofBN(0.20f, modelCopy, testSet, classIndex);
+
+            foldMetricsList.add(new FoldMetrics(
+                    i, // fold index
+                    eval.precision(1),
+                    eval.recall(1),
+                    eval.fMeasure(1),
+                    eval.areaUnderROC(1),
+                    eval.kappa(),
+                    eval.pctCorrect() / 100.0,
+                    eval.truePositiveRate(1),
+                    eval.falsePositiveRate(1),
+                    eval.trueNegativeRate(1),
+                    eval.falseNegativeRate(1),
+                    npofb20
+            ));
         }
 
-        return new ModelMetrics(
-                precisions.stream().mapToDouble(Double::doubleValue).average().orElse(0),
-                recalls.stream().mapToDouble(Double::doubleValue).average().orElse(0),
-                aucs.stream().mapToDouble(Double::doubleValue).average().orElse(0),
-                kappas.stream().mapToDouble(Double::doubleValue).average().orElse(0)
-        );
+        return new ModelMetrics(foldMetricsList);
+    }
+
+    private double computeNPofBN(double topFraction, Classifier cls, Instances data, int classIndex) throws Exception {
+        List<double[]> scored = new ArrayList<>();
+        for (int i = 0; i < data.numInstances(); i++) {
+            double[] dist = cls.distributionForInstance(data.instance(i));
+            double score = dist[1]; // probabilità della classe positiva
+            double actual = data.instance(i).classValue();
+            scored.add(new double[]{score, actual});
+        }
+
+        // Ordina per probabilità discendente
+        scored.sort((a, b) -> Double.compare(b[0], a[0]));
+
+        int topN = (int) Math.ceil(data.numInstances() * topFraction);
+        int foundBuggy = 0;
+        int totalBuggy = 0;
+
+        // conta tutti i buggy (classValue == 1)
+        for (double[] s : scored) {
+            if ((int) s[1] == 1) totalBuggy++;
+        }
+
+        if (totalBuggy == 0) return 0.0;
+
+        // conta quanti buggy sono nel top N%
+        for (int i = 0; i < topN; i++) {
+            if ((int) scored.get(i)[1] == 1) foundBuggy++;
+        }
+
+        return (double) foundBuggy / totalBuggy;
     }
 
     public void runPrediction() throws Exception {
@@ -500,19 +571,30 @@ public class PredictionController extends CsvController {
     }
 
     // Classe di supporto per le metriche
-    private static class ModelMetrics {
+    public record ModelMetrics(List<FoldMetrics> foldMetrics) {
+        public ModelMetrics(List<FoldMetrics> foldMetrics) {
+            this.foldMetrics = new ArrayList<>(foldMetrics);
+        }
 
-        final double precision;
-        final double recall;
-        final double auc;
-        final double kappa;
-
-        ModelMetrics(double precision, double recall, double auc, double kappa) {
-            this.precision = precision;
-            this.recall = recall;
-            this.auc = auc;
-            this.kappa = kappa;
+        @Override
+        public List<FoldMetrics> foldMetrics() {
+            return Collections.unmodifiableList(foldMetrics);
         }
     }
+
+    public record FoldMetrics(
+            int foldIndex,
+            double precision,
+            double recall,
+            double fMeasure,
+            double auc,
+            double kappa,
+            double accuracy,
+            double truePositiveRate,
+            double falsePositiveRate,
+            double trueNegativeRate,
+            double falseNegativeRate,
+            double npofb20
+    ) {}
 
 }

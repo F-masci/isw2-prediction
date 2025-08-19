@@ -1,5 +1,6 @@
 package it.isw2.prediction.repository;
 
+import it.isw2.prediction.config.ApplicationConfig;
 import it.isw2.prediction.model.Version;
 
 import java.util.*;
@@ -110,11 +111,8 @@ public class CachedVersionRepository implements VersionRepository {
     @Override
     public Version retrieveLastReleasedVersion() {
         loadVersionsCache();
-
-        return versionCache.values().stream()
-                .filter(version -> version.getReleaseDate() != null)
-                .max(Comparator.comparing(Version::getReleaseDate))
-                .orElse(null);
+        ApplicationConfig appConfig = new ApplicationConfig();
+        return this.retrieveVersionByName(appConfig.getLastReleasedVersionName());
     }
 
     /**

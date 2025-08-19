@@ -419,6 +419,10 @@ public class Method {
 
         // Trova l'ultimo commit che precede la data di rilascio della versione
         for (Commit commit : metricMap.keySet()) {
+            if(lastCommit == null && commit.getVersion().equals(version)) {
+                // Se il commit è della stessa versione, lo consideriamo come ultimo
+                lastCommit = commit;
+            }
             if (commit.getDate().before(version.getReleaseDate()) && (lastCommit == null || commit.getDate().after(lastCommit.getDate()))) {
                 lastCommit = commit;
             }

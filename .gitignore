@@ -39,6 +39,7 @@ data/
 
 ### Output ###
 output/
+scripts/*.png
 
 ### Progetti ###
 projects/

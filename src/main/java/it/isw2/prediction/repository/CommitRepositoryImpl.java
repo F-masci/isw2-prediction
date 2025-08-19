@@ -46,4 +46,11 @@ public class CommitRepositoryImpl implements CommitRepository {
                 .findFirst()
                 .orElse(null);
     }
+
+    @Override
+    public Commit retriveLastCommitOfBranch(String branchName) {
+        LOGGER.info(() -> "Recupero dell'ultimo commit del branch: " + branchName);
+        return commitDao.retriveLastCommitOfBranch(branchName);
+    }
+
 }

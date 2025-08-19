@@ -50,6 +50,14 @@ public class CachedCommitRepository implements CommitRepository {
     }
 
     /**
+     * Sovrascrive il metodo originale aggiungendo la funzionalità di cache.
+     */
+    @Override
+    public Commit retriveLastCommitOfBranch(String branchName) {
+        return repository.retriveLastCommitOfBranch(branchName);
+    }
+
+    /**
      * Carica la cache dei commit se non è già stata caricata.
      * Se la cache è già presente, non fa nulla.
      */
