@@ -34,12 +34,5 @@ build/
 ### Mac OS ###
 .DS_Store
 
-### Dataset ###
-data/
-
-### Output ###
-output/
-scripts/**/*.png
-
 ### Progetti ###
 projects/
