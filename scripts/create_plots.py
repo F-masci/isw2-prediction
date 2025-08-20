@@ -40,6 +40,7 @@ for metric in metrics:
     )
     plt.title(f'Box Plot {metric}')
     plt.xticks(rotation=0)
+    plt.ylim(0, 1)  # Limite asse y
     plt.tight_layout()
     plt.legend(title='Feature Selection')
     plt.savefig(f'{metric.lower().replace(" ", "_").replace("(", "").replace(")", "")}_boxplot.png')
@@ -74,6 +75,8 @@ g = sns.FacetGrid(
     palette=palette
 )
 g.map_dataframe(sns.boxplot, x='Feature Selection', y='Value', order=df['Feature Selection'].unique(), dodge=True, width=0.6, linewidth=1)
+for ax in g.axes.flat:
+    ax.set_ylim(0, 1)
 g.add_legend(title='Feature Selection', bbox_to_anchor=(1.05, 0.5), loc='center left', borderaxespad=0)
 g.set_titles(row_template='{row_name}', col_template='{col_name}')
 plt.legend(title='Feature Selection')
@@ -106,6 +109,7 @@ ax = sns.barplot(
     palette=base_palette,
     dodge=True
 )
+plt.ylim(0, 1)
 
 # Associa i colori alle barre in base ai dati
 for bar in ax.patches:
@@ -130,3 +134,25 @@ plt.legend(title='Metrica', bbox_to_anchor=(1.05, 1), loc='upper left')
 plt.tight_layout()
 plt.savefig('mean_metrics_model_fs_barplot_highlighted.png', dpi=200)
 plt.close()
+
+# --- Plot evoluzione metriche sui fold per ogni Model_FS ---
+if 'Fold' in df.columns:
+    for metric in main_metrics:
+        plt.figure(figsize=(14, 7))
+        ax = sns.lineplot(
+            data=df,
+            x='Fold',
+            y=metric,
+            hue='Model_FS',
+            marker='o'
+        )
+        plt.title(f'Evoluzione {metric} sui fold per Model / Feature Selection')
+        plt.xlabel('Fold')
+        plt.ylabel(metric)
+        plt.ylim(0, 1)  # Limite asse y
+        plt.legend(title='Model / Feature Selection', bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.tight_layout()
+        plt.savefig(f'{metric.lower().replace(" ", "_").replace("(", "").replace(")", "")}_fold_evolution.png', dpi=200)
+        plt.close()
+else:
+    print("Colonna 'Fold' non trovata nel dataset: impossibile generare il plot di evoluzione sui fold.")
