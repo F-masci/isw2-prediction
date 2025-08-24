@@ -156,3 +156,33 @@ if 'Fold' in df.columns:
         plt.close()
 else:
     print("Colonna 'Fold' non trovata nel dataset: impossibile generare il plot di evoluzione sui fold.")
+
+# --- Boxplot per ogni Feature Selection: confronto tra classificatori per ogni metrica ---
+
+# --- Boxplot unico per ogni Feature Selection: tutte le metriche principali come hue ---
+for fs in df['Feature Selection'].unique():
+    df_fs = df[df['Feature Selection'] == fs]
+    df_fs_melted = df_fs.melt(
+        id_vars=['Model'],
+        value_vars=main_metrics,
+        var_name='Metric',
+        value_name='Value'
+    )
+    plt.figure(figsize=(14, 7))
+    ax = sns.boxplot(
+        x='Model',
+        y='Value',
+        hue='Metric',
+        data=df_fs_melted,
+        palette="Pastel1",
+        width=0.6,
+        linewidth=1
+    )
+    plt.title(f"Boxplot delle metriche principali per Feature Selection: {fs}")
+    plt.ylim(0, 1)
+    plt.xlabel("Classificatore")
+    plt.ylabel("Valore metrica")
+    plt.legend(title='Metrica', bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+    plt.savefig(f"boxplot_main_metrics_fs_{fs.replace(' ', '_').replace('/', '_')}.png", dpi=200)
+    plt.close()
